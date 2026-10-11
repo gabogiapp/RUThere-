@@ -12,7 +12,8 @@
     "db:import-clubs": "node scripts/import-clubs.js",
     "cron:run": "node scripts/run-cron.js",
     "cron:run-10": "node scripts/run-cron.js --max-posts=10",
-    "cron:force-10": "node scripts/run-cron.js --max-posts=10 --force"
+    "cron:force-10": "node scripts/run-cron.js --max-posts=10 --force",
+    "cron:resume-10": "node scripts/run-cron.js --max-posts=10 --force --resume-from=10"
   },
   "dependencies": {
     "@neon/config": "^1.8.6",
