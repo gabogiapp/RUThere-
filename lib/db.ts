@@ -219,6 +219,7 @@ export async function getEvents(options: { currentSemesterOnly?: boolean } = { c
           e.campus,
           e.category,
           e.image_url,
+          e.video_url,
           e.flyer_details,
           e.description,
           e.created_at
@@ -242,6 +243,7 @@ export async function getEvents(options: { currentSemesterOnly?: boolean } = { c
           e.campus,
           e.category,
           e.image_url,
+          e.video_url,
           e.flyer_details,
           e.description,
           e.created_at
@@ -268,6 +270,7 @@ export async function getEvents(options: { currentSemesterOnly?: boolean } = { c
       category: row.category || row.club_category || "Social & Student Life",
       image_url: row.image_url,
       video_url: row.video_url,
+      is_video: Boolean(row.video_url) || Boolean(row.is_video),
       flyer_details: row.flyer_details,
       description: row.description || "",
       important_links: row.post_url ? [row.post_url] : [],
@@ -298,6 +301,28 @@ export async function upsertEvent(event: EventRecord): Promise<EventRecord> {
   }
   saveLocalStore(store);
   return event;
+}
+
+export async function updateEventVideo(eventId: string, videoUrl: string): Promise<boolean> {
+  const store = loadLocalStore();
+  const event = store.events.find((e) => e.id === eventId || e.instagram_post_id === eventId);
+  if (event) {
+    event.video_url = videoUrl;
+    event.is_video = true;
+    saveLocalStore(store);
+  }
+  const db = getPool();
+  if (db) {
+    try {
+      await db.query(
+        "UPDATE events SET video_url = $1 WHERE id = $2 OR instagram_post_id = $2",
+        [videoUrl, eventId]
+      );
+    } catch (e) {
+      console.warn("Failed to update video_url in Postgres:", e);
+    }
+  }
+  return true;
 }
 
 export async function processAndStoreBrightData(
