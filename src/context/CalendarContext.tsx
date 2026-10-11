@@ -114,6 +114,16 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         const matchesLoc = event.location.toLowerCase().includes(q);
         const matchesDesc = (event.description || '').toLowerCase().includes(q);
 
+        const isFreeFoodSearch =
+          q === 'free food' ||
+          q.includes('free food') ||
+          q.includes('freefood') ||
+          q === 'food' ||
+          q === 'free' ||
+          'free food'.includes(q) ||
+          q.includes('pizza');
+        const matchesFreeFood = Boolean(event.has_free_food) && isFreeFoodSearch;
+
         // Also check if search query matches any interest tag of this event's club
         const matchingClub = clubs.find(c => {
           const cName = c.name.toLowerCase();
@@ -125,7 +135,7 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           return (c.interests || []).some(interest => interest.toLowerCase().includes(q));
         });
 
-        if (!matchesTitle && !matchesClub && !matchesLoc && !matchesDesc && !matchingClub) {
+        if (!matchesTitle && !matchesClub && !matchesLoc && !matchesDesc && !matchesFreeFood && !matchingClub) {
           return false;
         }
       }

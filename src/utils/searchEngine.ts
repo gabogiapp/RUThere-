@@ -194,32 +194,55 @@ export function getBestMatches(
         event,
       });
     } else {
-      // Check if this event is hosted by a club whose primary focus matches the query
-      const hostClub = clubs.find((c) => {
-        const cName = c.name.toLowerCase();
-        const cHandle = c.handle.toLowerCase().replace(/^@/, '');
-        return (
-          event.club_name.toLowerCase().includes(cName) ||
-          event.club_handle.toLowerCase().replace(/^@/, '') === cHandle
-        );
-      });
+      const isFreeFoodSearch =
+        clean === 'free food' ||
+        clean.includes('free food') ||
+        clean === 'freefood' ||
+        clean === 'food' ||
+        clean === 'free' ||
+        'free food'.includes(clean) ||
+        clean.includes('pizza');
+      const matchesFreeFood = Boolean(event.has_free_food) && isFreeFoodSearch;
 
-      const hostHasPrimaryInterest = hostClub && (hostClub.interests || []).some((interest) => {
-        const iLower = interest.toLowerCase();
-        return iLower === clean || iLower.includes(clean);
-      });
-
-      if (hostHasPrimaryInterest) {
+      if (matchesFreeFood) {
         matchedEventIds.add(event.id);
         results.push({
           id: `event-${event.id}`,
           type: 'event',
           title: event.title,
           subtitle: `${event.date || event.parsedDate} • ${event.time} • ${event.location}`,
-          detail: event.club_name,
-          score: 0.12,
+          detail: `🍕 FREE FOOD Included • ${event.club_name}`,
+          score: clean === 'free food' || clean === 'freefood' ? 0.03 : 0.11,
           event,
         });
+      } else {
+        // Check if this event is hosted by a club whose primary focus matches the query
+        const hostClub = clubs.find((c) => {
+          const cName = c.name.toLowerCase();
+          const cHandle = c.handle.toLowerCase().replace(/^@/, '');
+          return (
+            event.club_name.toLowerCase().includes(cName) ||
+            event.club_handle.toLowerCase().replace(/^@/, '') === cHandle
+          );
+        });
+
+        const hostHasPrimaryInterest = hostClub && (hostClub.interests || []).some((interest) => {
+          const iLower = interest.toLowerCase();
+          return iLower === clean || iLower.includes(clean);
+        });
+
+        if (hostHasPrimaryInterest) {
+          matchedEventIds.add(event.id);
+          results.push({
+            id: `event-${event.id}`,
+            type: 'event',
+            title: event.title,
+            subtitle: `${event.date || event.parsedDate} • ${event.time} • ${event.location}`,
+            detail: event.club_name,
+            score: 0.12,
+            event,
+          });
+        }
       }
     }
   }

@@ -222,6 +222,14 @@ export const MonthView: React.FC = () => {
                         >
                           {event.campus}
                         </span>
+                        {event.has_free_food && (
+                          <span
+                            className="inline-flex items-center gap-1 rounded border border-[#fdba74] bg-[#ffedd5] px-1.5 py-0.5 text-[10px] font-bold text-[#c2410c]"
+                          >
+                            <span>🍕</span>
+                            <span>FREE FOOD!!</span>
+                          </span>
+                        )}
                         {event.video_url && (
                           <span className="flex items-center gap-1 rounded bg-[#E1306C]/10 border border-[#E1306C]/30 text-[#E1306C] px-1.5 py-0.5 text-[10px] font-medium">
                             <Film size={10} />

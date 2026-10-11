@@ -68,6 +68,10 @@
     "flyer_details": {
       "type": "string",
       "description": "Key event information, speakers, food, or instructions visible directly in the flyer graphic."
+    },
+    "has_free_food": {
+      "type": "boolean",
+      "description": "True if free food, pizza, snacks, refreshments, boba, dinner, lunch, or drinks are provided or advertised for this event (look at caption text or flyer graphic image). False otherwise."
     }
   },
   "required": [

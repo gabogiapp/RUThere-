@@ -69,6 +69,10 @@ export function getExampleSchema() {
         type: "string",
         description: "Key information visible directly on the flyer graphic (speakers, food, room, sponsors, instructions).",
       },
+      has_free_food: {
+        type: "boolean",
+        description: "True if free food, pizza, snacks, refreshments, boba, dinner, lunch, or drinks are provided or advertised for this event (look at caption text or flyer graphic image). False otherwise.",
+      },
     },
     required: ["is_event", "title", "date", "time", "location", "campus", "category"],
   };
@@ -173,6 +177,11 @@ ${input.hasImage
       ? "Look carefully at the attached flyer image. Read all text printed on the flyer (headline, date, time, room number, free food, guest speakers, QR codes/links). Populate 'flyer_details' with all valuable supplementary details visible in the graphic."
       : "No image available; extract strictly from caption text. Leave 'flyer_details' empty or summarize caption perks."
     }
+
+Free Food Detection:
+- Carefully inspect both the caption text AND the attached flyer image graphic (or video).
+- If the post or flyer mentions or promises free food, pizza, snacks, refreshments, boba, drinks, dinner, lunch, catered food, treats, or "food provided", and you are confident free food/refreshments are available, set "has_free_food": true.
+- If no free food or refreshments are offered, set "has_free_food": false.
 
 If the post is NOT announcing an upcoming event, meeting, or activity, set "is_event": false.`;
 }

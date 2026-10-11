@@ -172,10 +172,10 @@ export const AgendaView: React.FC = () => {
             <span
               className={`flex size-2.5 rounded-full ${
                 dateInfo.isToday
-                  ? 'bg-[#cc0033] ring-4 ring-[#cc0033]/20'
+                  ? 'bg-emerald-500 ring-4 ring-emerald-500/25'
                   : dateInfo.isPast
                   ? 'bg-amber-500 ring-2 ring-amber-500/25'
-                  : 'bg-emerald-500 ring-2 ring-emerald-500/20'
+                  : 'bg-neutral-300'
               }`}
             />
             <h3 className="text-[13px] font-bold uppercase tracking-wider text-[var(--text-primary)]">
@@ -242,6 +242,14 @@ export const AgendaView: React.FC = () => {
                         >
                           {event.campus}
                         </span>
+                        {event.has_free_food && (
+                          <span
+                            className="inline-flex items-center gap-1 rounded-md border border-[#fdba74] bg-[#ffedd5] px-2 py-0.5 text-[11px] font-bold text-[#c2410c] shadow-2xs"
+                          >
+                            <span>🍕</span>
+                            <span>FREE FOOD!!</span>
+                          </span>
+                        )}
                         <span className="text-[12px] font-medium text-[var(--text-muted)]">
                           {event.club_name} ({event.club_handle})
                         </span>

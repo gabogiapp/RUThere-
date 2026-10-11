@@ -168,55 +168,10 @@ export const Header: React.FC = () => {
 
   return (
     <header className="sticky top-0 z-40 border-b border-[#b3002d] bg-[#cc0033] select-none shadow-sm">
-      <div className="flex h-14 items-center justify-between gap-2 px-3 md:px-5">
+      <div className="relative flex h-14 items-center justify-between gap-2 px-3 md:px-5">
         
-        {/* 1. Left Group: Search Bar */}
-        <div ref={searchRef} className="relative flex flex-1 max-w-xs sm:max-w-sm md:max-w-md items-center min-w-[130px]">
-          <Search
-            size={15}
-            className="absolute left-3 text-gray-400 pointer-events-none"
-          />
-          <input
-            type="text"
-            placeholder="Search clubs, rooms, interests..."
-            value={searchQuery}
-            onFocus={() => {
-              if (searchQuery.trim()) setSearchDropdownOpen(true);
-            }}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              setSelectedIndex(0);
-              setSearchDropdownOpen(true);
-            }}
-            onKeyDown={handleInputKeyDown}
-            className="h-9 w-full rounded-xl bg-white pl-9 pr-8 text-[13px] text-[#141414] placeholder-gray-400 outline-none ring-1 ring-black/10 focus:ring-2 focus:ring-white transition-all shadow-xs"
-          />
-          {searchQuery && (
-            <button
-              type="button"
-              onClick={() => {
-                setSearchQuery('');
-                setSearchDropdownOpen(false);
-              }}
-              className="absolute right-2 flex size-5 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700"
-            >
-              <X size={12} />
-            </button>
-          )}
-
-          {/* Live Search Dropdown */}
-          <SearchDropdown
-            results={searchMatches}
-            selectedIndex={selectedIndex}
-            isOpen={searchDropdownOpen}
-            query={searchQuery}
-            onSelectResult={handleSelectResult}
-            onMouseEnterItem={setSelectedIndex}
-          />
-        </div>
-
-        {/* 2. Middle Group: Campus & Club Category Dropdowns */}
-        <div className="flex items-center gap-1.5 sm:gap-2">
+        {/* 1. Left Group: Filtering Dropdowns (pinned to left at all times) */}
+        <div className="flex items-center gap-1.5 sm:gap-2 z-10 shrink-0">
           
           {/* Campus Dropdown */}
           <div ref={campusRef} className="relative">
@@ -341,7 +296,7 @@ export const Header: React.FC = () => {
             </button>
 
             {categoryDropdownOpen && (
-              <div className="absolute right-0 top-11 z-50 w-56 rounded-xl border border-[var(--border-color)] bg-white text-[var(--text-primary)] p-1.5 shadow-xl animate-fade-in text-[12px]">
+              <div className="absolute left-0 top-11 z-50 w-56 rounded-xl border border-[var(--border-color)] bg-white text-[var(--text-primary)] p-1.5 shadow-xl animate-fade-in text-[12px]">
                 <div className="flex items-center justify-between px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-gray-400">
                   <span>Club Categories</span>
                   {selectedCategory !== 'All' && (
@@ -412,8 +367,55 @@ export const Header: React.FC = () => {
 
         </div>
 
-        {/* 3. Right Group: Month Navigation Bar (to the left of View Selector) & View Selector */}
-        <div className="flex items-center gap-1.5 sm:gap-2">
+        {/* 2. Middle Group: Search Bar (Centered at all times) */}
+        <div className="absolute left-1/2 -translate-x-1/2 w-full max-w-xs sm:max-w-sm md:max-w-md px-2 z-20 pointer-events-none">
+          <div ref={searchRef} className="relative w-full pointer-events-auto">
+            <Search
+              size={15}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+            />
+            <input
+              type="text"
+              placeholder="Search clubs, rooms, interests..."
+              value={searchQuery}
+              onFocus={() => {
+                if (searchQuery.trim()) setSearchDropdownOpen(true);
+              }}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setSelectedIndex(0);
+                setSearchDropdownOpen(true);
+              }}
+              onKeyDown={handleInputKeyDown}
+              className="h-9 w-full rounded-xl bg-white pl-9 pr-8 text-[13px] text-[#141414] placeholder-gray-400 outline-none ring-1 ring-black/10 focus:ring-2 focus:ring-white transition-all shadow-xs"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery('');
+                  setSearchDropdownOpen(false);
+                }}
+                className="absolute right-2 top-1/2 -translate-y-1/2 flex size-5 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+              >
+                <X size={12} />
+              </button>
+            )}
+
+            {/* Live Search Dropdown */}
+            <SearchDropdown
+              results={searchMatches}
+              selectedIndex={selectedIndex}
+              isOpen={searchDropdownOpen}
+              query={searchQuery}
+              onSelectResult={handleSelectResult}
+              onMouseEnterItem={setSelectedIndex}
+            />
+          </div>
+        </div>
+
+        {/* 3. Right Group: Month Navigation Bar & View Selector (Pinned to the right at all times) */}
+        <div className="flex items-center gap-1.5 sm:gap-2 z-10 shrink-0 ml-auto justify-end">
           
           {/* Month Bar with Arrows and Interactive Month Calendar Popover (hidden when in List view) */}
           {view !== 'agenda' && (

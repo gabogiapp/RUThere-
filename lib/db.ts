@@ -193,6 +193,17 @@ export function getCurrentSemesterRange(referenceDate: Date = new Date()): {
   }
 }
 
+let hasEnsuredFreeFoodColumn = false;
+async function ensureFreeFoodColumn(database: any) {
+  if (hasEnsuredFreeFoodColumn || !database) return;
+  try {
+    await database.query("ALTER TABLE events ADD COLUMN IF NOT EXISTS has_free_food BOOLEAN DEFAULT FALSE;");
+    hasEnsuredFreeFoodColumn = true;
+  } catch {
+    // ignore if already exists or permission
+  }
+}
+
 export async function getEvents(options: { currentSemesterOnly?: boolean } = { currentSemesterOnly: true }): Promise<EventRecord[]> {
   const db = getPool();
   const semester = getCurrentSemesterRange();
@@ -209,6 +220,8 @@ export async function getEvents(options: { currentSemesterOnly?: boolean } = { c
   }
 
   try {
+    await ensureFreeFoodColumn(db);
+
     const query = filterSemester
       ? `
         SELECT 
@@ -228,6 +241,7 @@ export async function getEvents(options: { currentSemesterOnly?: boolean } = { c
           e.video_url,
           e.flyer_details,
           e.description,
+          e.has_free_food,
           e.created_at
         FROM events e
         LEFT JOIN clubs c ON e.club_id = c.id
@@ -252,6 +266,7 @@ export async function getEvents(options: { currentSemesterOnly?: boolean } = { c
           e.video_url,
           e.flyer_details,
           e.description,
+          e.has_free_food,
           e.created_at
         FROM events e
         LEFT JOIN clubs c ON e.club_id = c.id
@@ -280,6 +295,7 @@ export async function getEvents(options: { currentSemesterOnly?: boolean } = { c
       description: row.description || "",
       important_links: row.post_url ? [row.post_url] : [],
       is_event: true,
+      has_free_food: Boolean(row.has_free_food),
       event_time: row.event_time,
     }));
   } catch (err) {
@@ -497,6 +513,7 @@ export async function processAndStoreBrightData(
             is_video: isVideo,
             flyer_details: extracted.flyer_details || "",
             is_event: true,
+            has_free_food: Boolean(extracted.has_free_food),
             event_time: eventTimeStr,
             created_at: new Date().toISOString(),
             extraction_source: extracted.extraction_source,
@@ -505,12 +522,13 @@ export async function processAndStoreBrightData(
           // If connected to Neon Postgres, persist complete multimodal attributes
           if (db && club && club.id) {
             try {
+              await ensureFreeFoodColumn(db);
               await db.query(
                 `INSERT INTO events (
                   club_id, instagram_post_id, post_url, title, event_time, location,
-                  description, campus, category, image_url, video_url, flyer_details, extraction_source
+                  description, campus, category, image_url, video_url, flyer_details, extraction_source, has_free_food
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
                 ON CONFLICT (instagram_post_id) DO UPDATE SET
                   club_id = EXCLUDED.club_id,
                   post_url = EXCLUDED.post_url,
@@ -523,7 +541,8 @@ export async function processAndStoreBrightData(
                   image_url = COALESCE(EXCLUDED.image_url, events.image_url),
                   video_url = COALESCE(EXCLUDED.video_url, events.video_url),
                   flyer_details = COALESCE(EXCLUDED.flyer_details, events.flyer_details),
-                  extraction_source = COALESCE(EXCLUDED.extraction_source, events.extraction_source)`,
+                  extraction_source = COALESCE(EXCLUDED.extraction_source, events.extraction_source),
+                  has_free_food = COALESCE(EXCLUDED.has_free_food, events.has_free_food)`,
                 [
                   club.id,
                   postId,
@@ -538,6 +557,7 @@ export async function processAndStoreBrightData(
                   videoUrl || null,
                   extracted.flyer_details || null,
                   extracted.extraction_source || "gemini_multimodal",
+                  Boolean(extracted.has_free_food),
                 ]
               );
             } catch (err) {

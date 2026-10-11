@@ -371,6 +371,7 @@ export function enrichEvent(item: BackendEventItem, idx: number): CalendarEvent 
     important_links: links,
     color_scheme: color,
     is_all_day,
+    has_free_food: Boolean(item.has_free_food),
     parsedDate,
     startMinutes: timeInfo.startMinutes,
     endMinutes: timeInfo.endMinutes,

@@ -9,7 +9,7 @@ import {
   getWeekDates,
   isSameDay,
 } from '../utils/dateUtils';
-import { MapPin, Clock, X, Users, Calendar } from 'lucide-react';
+import { MapPin, Clock, X, Users, Calendar, Film, Image as ImageIcon, ArrowRight } from 'lucide-react';
 
 const START_HOUR = 8; // 8 AM
 const END_HOUR = 23; // 11 PM
@@ -21,13 +21,14 @@ const MAX_SIMULTANEOUS_COLUMNS = 2; // Prevents cards from squishing into tiny s
 export const WeekView: React.FC = () => {
   const {
     currentDate,
+    setCurrentDate,
+    setView,
     filteredEvents,
     setSelectedEvent,
   } = useCalendar();
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const expandedRef = useRef<HTMLDivElement>(null);
-  const [expandedDate, setExpandedDate] = useState<string | null>(null);
+  const [moreModalData, setMoreModalData] = useState<{ date: Date; events: CalendarEvent[] } | null>(null);
 
   const weekDates = getWeekDates(currentDate);
   const today = new Date();
@@ -39,25 +40,16 @@ export const WeekView: React.FC = () => {
     }
   }, []);
 
-  // Close day expansion popover on click outside or Escape
+  // Close "+N more" popup on Escape key
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (expandedRef.current && !expandedRef.current.contains(e.target as Node)) {
-        setExpandedDate(null);
-      }
-    };
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setExpandedDate(null);
+      if (e.key === 'Escape' && moreModalData) {
+        setMoreModalData(null);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, []);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [moreModalData]);
 
   // Current time position for today's red line
   const now = new Date();
@@ -134,14 +126,18 @@ export const WeekView: React.FC = () => {
           const dayNum = d.getDate();
           const dateKey = formatIsoDate(d);
           const dayEvents = eventsByDay[dateKey] || [];
-          const isExpanded = expandedDate === dateKey;
 
           return (
             <div
               key={d.toISOString()}
               className="flex h-11 min-w-0 flex-1 items-center justify-between border-l border-[var(--border-subtle)] px-2"
             >
-              <div className="flex items-center gap-1.5 truncate">
+              <div
+                onClick={() => {
+                  setCurrentDate(d);
+                }}
+                className="flex items-center gap-1.5 truncate cursor-pointer hover:opacity-80 transition-opacity"
+              >
                 <span className="text-[12px] font-medium text-[var(--text-secondary)]">
                   {dayName}
                 </span>
@@ -158,17 +154,13 @@ export const WeekView: React.FC = () => {
                 </span>
               </div>
 
-              {/* Day Event Count Pill / Expansion Toggle (centered vertically in header) */}
+              {/* Day Event Count Pill -> opens centered modal */}
               {dayEvents.length > 2 && (
                 <button
                   type="button"
-                  onClick={() => setExpandedDate(isExpanded ? null : dateKey)}
-                  className={`flex items-center justify-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold transition-all cursor-pointer shadow-2xs self-center my-auto ${
-                    isExpanded
-                      ? 'bg-[#cc0033] text-white'
-                      : 'bg-[#cc0033]/10 text-[#cc0033] hover:bg-[#cc0033]/20'
-                  }`}
-                  title="Click to expand all events for this day"
+                  onClick={() => setMoreModalData({ date: d, events: dayEvents })}
+                  className="flex items-center justify-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold transition-all cursor-pointer shadow-2xs self-center my-auto bg-[#cc0033]/10 text-[#cc0033] hover:bg-[#cc0033] hover:text-white"
+                  title={`View all ${dayEvents.length} events for this day`}
                 >
                   <span>+{dayEvents.length - 2}</span>
                 </button>
@@ -188,13 +180,15 @@ export const WeekView: React.FC = () => {
             {weekDates.map((d) => {
               const dateKey = formatIsoDate(d);
               const allDayList = (eventsByDay[dateKey] || []).filter((e) => e.is_all_day);
+              const visibleAllDay = allDayList.slice(0, 2);
+              const extraAllDayCount = allDayList.length - 2;
 
               return (
                 <div
                   key={dateKey}
                   className="flex-1 min-w-0 border-l border-[var(--border-subtle)] p-1 space-y-1"
                 >
-                  {allDayList.map((event) => {
+                  {visibleAllDay.map((event) => {
                     const palette = COLOR_MAP[event.color_scheme];
                     const campusColor = getCampusColor(event.campus);
 
@@ -231,6 +225,17 @@ export const WeekView: React.FC = () => {
                       </div>
                     );
                   })}
+
+                  {/* "+X more" button for overflow all-day events */}
+                  {extraAllDayCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setMoreModalData({ date: d, events: allDayList })}
+                      className="text-left text-[10px] font-bold text-[#cc0033] hover:underline pl-1 cursor-pointer block"
+                    >
+                      +{extraAllDayCount} more
+                    </button>
+                  )}
                 </div>
               );
             })}
@@ -267,12 +272,11 @@ export const WeekView: React.FC = () => {
           className="relative flex flex-1"
           style={{ height: `${TOTAL_MINUTES * (HOUR_HEIGHT / 60)}px` }}
         >
-          {weekDates.map((d, colIndex) => {
+          {weekDates.map((d) => {
             const dateKey = formatIsoDate(d);
             const allEventsOnDay = eventsByDay[dateKey] || [];
             const timedEvents = allEventsOnDay.filter((e) => !e.is_all_day);
             const isToday = isSameDay(d, today);
-            const isExpanded = expandedDate === dateKey;
 
             const { visibleItems, overflowItems } = computeAntiSquishLayout(timedEvents);
 
@@ -284,7 +288,7 @@ export const WeekView: React.FC = () => {
               const startY = (Math.max(minStart, START_HOUR * 60) - START_HOUR * 60) * (HOUR_HEIGHT / 60);
               const endY = (Math.min(maxEnd, END_HOUR * 60) - START_HOUR * 60) * (HOUR_HEIGHT / 60);
               const centerY = (startY + endY) / 2;
-              return Math.max(centerY - 14, 20); // 14px is half of h-7 (28px) to center it vertically
+              return Math.max(centerY - 14, 20);
             })();
 
             return (
@@ -376,13 +380,13 @@ export const WeekView: React.FC = () => {
                   );
                 })}
 
-                {/* Overlap Anti-Squish Pill: "+(N) more" */}
+                {/* Overlap Anti-Squish Pill: "+(N) more" -> opens centered dimmed modal */}
                 {overflowItems.length > 0 && (
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setExpandedDate(isExpanded ? null : dateKey);
+                      setMoreModalData({ date: d, events: allEventsOnDay });
                     }}
                     style={{
                       top: `${overflowTop}px`,
@@ -390,116 +394,175 @@ export const WeekView: React.FC = () => {
                       right: '4px',
                     }}
                     className="absolute z-20 flex h-7 items-center justify-center gap-1.5 rounded-lg bg-[#cc0033] px-2 text-[11px] font-bold text-white shadow-md hover:bg-[#b3002d] transition-all cursor-pointer ring-1 ring-white/20"
-                    title={`Click to expand all ${allEventsOnDay.length} events for this day`}
+                    title={`Click to view all ${allEventsOnDay.length} events for this day`}
                   >
                     <span>+{overflowItems.length} more</span>
                   </button>
-                )}
-
-                {/* 4. Interactive Click-to-Expand Popover (Prevents Clutterness) */}
-                {isExpanded && (
-                  <div
-                    ref={expandedRef}
-                    onClick={(e) => e.stopPropagation()}
-                    style={{
-                      left: colIndex >= 4 ? 'auto' : '-4px',
-                      right: colIndex >= 4 ? '-4px' : 'auto',
-                    }}
-                    className="absolute top-2 z-50 w-76 sm:w-84 rounded-2xl border border-[var(--border-color)] bg-white p-3.5 shadow-2xl animate-fade-in"
-                  >
-                    {/* Header */}
-                    <div className="flex items-center justify-between border-b border-gray-100 pb-2.5 mb-2.5">
-                      <div>
-                        <h4 className="text-[13px] font-bold text-[#141414]">
-                          {d.toLocaleDateString('en-US', {
-                            weekday: 'short',
-                            month: 'short',
-                            day: 'numeric',
-                          })}
-                        </h4>
-                        <p className="text-[11px] text-gray-500 font-medium">
-                          {allEventsOnDay.length} {allEventsOnDay.length === 1 ? 'event' : 'events'} on this day
-                        </p>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => setExpandedDate(null)}
-                        className="flex size-6 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors"
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-
-                    {/* Full un-squished event cards list */}
-                    <div className="max-h-80 overflow-y-auto space-y-2 pr-1">
-                      {allEventsOnDay.map((event) => {
-                        const palette = COLOR_MAP[event.color_scheme];
-                        const campusColor = getCampusColor(event.campus);
-
-                        return (
-                          <div
-                            key={event.id}
-                            onClick={() => {
-                              setSelectedEvent(event);
-                              setExpandedDate(null);
-                            }}
-                            className="group relative cursor-pointer rounded-xl border border-[var(--border-subtle)] bg-gray-50/80 p-2.5 transition-all hover:bg-white hover:border-[#cc0033]/30 hover:shadow-sm"
-                          >
-                            <span
-                              className="absolute top-2 bottom-2 left-0 w-1 rounded-r"
-                              style={{ backgroundColor: palette.bar }}
-                            />
-
-                            <div className="pl-2 space-y-1">
-                              <div className="flex flex-wrap items-center gap-1.5">
-                                <span className={`rounded px-1.5 py-0.2 text-[9px] font-semibold border ${palette.badge}`}>
-                                  {event.category}
-                                </span>
-                                <span
-                                  className="rounded border px-1.5 py-0.2 text-[9px] font-semibold"
-                                  style={{
-                                    backgroundColor: campusColor.bg,
-                                    color: campusColor.text,
-                                    borderColor: campusColor.border,
-                                  }}
-                                >
-                                  {event.campus}
-                                </span>
-                                {event.is_all_day && (
-                                  <span className="rounded bg-amber-100 border border-amber-300 text-amber-800 px-1 py-0.2 text-[9px] font-bold">
-                                    All Day
-                                  </span>
-                                )}
-                              </div>
-
-                              <h5 className="text-[13px] font-bold text-[#141414] group-hover:text-[#cc0033] transition-colors line-clamp-1">
-                                {event.title}
-                              </h5>
-
-                              <div className="flex flex-wrap items-center gap-2 text-[11px] text-gray-600 font-mono">
-                                <div className="flex items-center gap-1">
-                                  <Clock size={11} className="text-gray-400" />
-                                  <span>{event.time}</span>
-                                </div>
-                              </div>
-
-                              <div className="flex items-center gap-1 text-[11px] text-gray-500 truncate">
-                                <Users size={11} className="text-gray-400 shrink-0" />
-                                <span className="truncate">{event.club_name}</span>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
                 )}
               </div>
             );
           })}
         </div>
       </div>
+
+      {/* Centered Dimmed "+N more" Events Modal (Matching MonthView style & design) */}
+      {moreModalData && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in"
+          onClick={() => setMoreModalData(null)}
+        >
+          <div
+            className="relative w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden rounded-2xl border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-2xl transition-all"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-[var(--border-color)] p-4 sm:px-5 bg-[var(--bg-primary)] shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="flex size-9 items-center justify-center rounded-xl bg-[#cc0033]/10 text-[#cc0033] shadow-2xs">
+                  <Calendar size={18} />
+                </div>
+                <div>
+                  <h3 className="text-[15px] font-bold text-[var(--text-primary)]">
+                    {moreModalData.date.toLocaleDateString(undefined, {
+                      weekday: 'long',
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                    })}
+                  </h3>
+                  <p className="text-[12px] text-[var(--text-muted)]">
+                    {moreModalData.events.length} events scheduled on this day
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setMoreModalData(null)}
+                title="Close (Esc)"
+                className="flex size-7 items-center justify-center rounded-full text-[var(--text-muted)] hover:bg-[var(--border-color)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Scrollable Event List */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-2.5 max-h-[60vh]">
+              {moreModalData.events.map((event) => {
+                const palette = COLOR_MAP[event.color_scheme];
+                const campusColor = getCampusColor(event.campus);
+
+                return (
+                  <div
+                    key={event.id}
+                    onClick={() => {
+                      setSelectedEvent(event);
+                      setMoreModalData(null);
+                    }}
+                    className="group relative cursor-pointer rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-3 transition-all hover:bg-[var(--bg-primary)] hover:border-[#cc0033]/40 hover:shadow-md"
+                  >
+                    {/* Left Accent indicator bar */}
+                    <span
+                      className="absolute top-2.5 bottom-2.5 left-0 w-1 rounded-r-full"
+                      style={{ backgroundColor: palette.bar }}
+                    />
+
+                    <div className="pl-2 space-y-1.5">
+                      {/* Badges row */}
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span
+                          className={`rounded px-1.5 py-0.5 text-[10px] font-semibold border ${palette.badge}`}
+                        >
+                          {event.category}
+                        </span>
+                        <span
+                          className="rounded border px-1.5 py-0.5 text-[10px] font-semibold"
+                          style={{
+                            backgroundColor: campusColor.bg,
+                            color: campusColor.text,
+                            borderColor: campusColor.border,
+                          }}
+                        >
+                          {event.campus}
+                        </span>
+                        {event.has_free_food && (
+                          <span
+                            className="inline-flex items-center gap-1 rounded border border-[#fdba74] bg-[#ffedd5] px-1.5 py-0.5 text-[10px] font-bold text-[#c2410c]"
+                          >
+                            <span>🍕</span>
+                            <span>FREE FOOD!!</span>
+                          </span>
+                        )}
+                        {event.video_url && (
+                          <span className="flex items-center gap-1 rounded bg-[#E1306C]/10 border border-[#E1306C]/30 text-[#E1306C] px-1.5 py-0.5 text-[10px] font-medium">
+                            <Film size={10} />
+                            <span>Video</span>
+                          </span>
+                        )}
+                        {!event.video_url && event.image_url && (
+                          <span className="flex items-center gap-1 rounded bg-black/5 border border-[var(--border-subtle)] text-[var(--text-secondary)] px-1.5 py-0.5 text-[10px] font-medium">
+                            <ImageIcon size={10} />
+                            <span>Flyer</span>
+                          </span>
+                        )}
+                        {event.is_all_day && (
+                          <span className="rounded bg-amber-100 border border-amber-300 text-amber-800 px-1.5 py-0.5 text-[10px] font-bold">
+                            All Day
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Event Title */}
+                      <h4 className="text-[14px] font-bold text-[var(--text-primary)] group-hover:text-[#cc0033] transition-colors leading-snug line-clamp-2">
+                        {event.title}
+                      </h4>
+
+                      {/* Time & Location */}
+                      <div className="flex flex-wrap items-center gap-3 text-[12px] text-[var(--text-secondary)] font-mono">
+                        <div className="flex items-center gap-1">
+                          <Clock size={12} className="text-[#cc0033]" />
+                          <span>{event.time}</span>
+                        </div>
+                        {event.location && (
+                          <div className="flex items-center gap-1 truncate max-w-[200px]">
+                            <MapPin size={12} className="text-[var(--text-muted)] shrink-0" />
+                            <span className="truncate">{event.location}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Club info */}
+                      <div className="flex items-center gap-1 text-[11px] text-[var(--text-muted)]">
+                        <Users size={12} className="shrink-0" />
+                        <span className="truncate">{event.club_name}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Footer with Day View Switcher */}
+            <div className="flex items-center justify-between border-t border-[var(--border-color)] p-3 px-4 sm:px-5 bg-[var(--bg-secondary)]/50 shrink-0">
+              <span className="text-[12px] text-[var(--text-muted)]">
+                Click any event to view full details
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setCurrentDate(moreModalData.date);
+                  setView('day');
+                  setMoreModalData(null);
+                }}
+                className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#cc0033] hover:underline cursor-pointer"
+              >
+                <span>Open in Day View</span>
+                <ArrowRight size={13} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

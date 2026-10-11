@@ -355,6 +355,14 @@ export const EventDetailModal: React.FC = () => {
                   </span>
                 );
               })()}
+              {selectedEvent.has_free_food && (
+                <span
+                  className="inline-flex items-center gap-1 rounded-md border border-[#fdba74] bg-[#ffedd5] px-2.5 py-0.5 text-[11px] font-bold text-[#c2410c] shadow-2xs"
+                >
+                  <span>🍕</span>
+                  <span>FREE FOOD!!</span>
+                </span>
+              )}
               {hasPlayableVideo && (
                 <span className="inline-flex items-center gap-1 rounded-md border border-[#E1306C]/30 bg-[#E1306C]/10 px-2 py-0.5 text-[11px] font-semibold text-[#E1306C]">
                   <Film size={11} />

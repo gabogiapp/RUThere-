@@ -20,6 +20,7 @@ export function extractEventDetails(
       category: clubInfo?.category || "Social & Student Life",
       important_links: [],
       flyer_details: "",
+      has_free_food: false,
     };
   }
 
@@ -137,6 +138,31 @@ export function extractEventDetails(
     title = first.length > 85 ? first.slice(0, 82) + "..." : first;
   }
 
+  // Extract Free Food presence
+  const freeFoodIndicators = [
+    "free food",
+    "free pizza",
+    "free snacks",
+    "free boba",
+    "free drinks",
+    "free dinner",
+    "free lunch",
+    "food provided",
+    "pizza provided",
+    "refreshments provided",
+    "free refreshments",
+    "complimentary food",
+    "complimentary pizza",
+    "complimentary snacks",
+    "food will be served",
+    "pizza will be served",
+    "food will be provided",
+    "pizza will be provided",
+    "snacks will be provided",
+    "snacks provided",
+  ];
+  const hasFreeFood = freeFoodIndicators.some((kw) => lower.includes(kw));
+
   return {
     is_event: isEvent,
     title,
@@ -147,5 +173,6 @@ export function extractEventDetails(
     category,
     important_links: importantLinks,
     flyer_details: "",
+    has_free_food: hasFreeFood,
   };
 }

@@ -20,6 +20,7 @@ export interface BackendEventItem {
   video_url?: string;
   is_video?: boolean;
   flyer_details?: string;
+  has_free_food?: boolean;
   extraction_source?: 'gemini' | 'heuristic';
 }
 
