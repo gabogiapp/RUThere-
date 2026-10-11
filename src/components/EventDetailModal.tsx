@@ -55,6 +55,19 @@ export const EventDetailModal: React.FC = () => {
   const hasImage = Boolean(selectedEvent.image_url && !hasVideo && !mediaError);
   const hasMedia = hasVideo || hasImage;
 
+  // Filter out redundant origin post links from important_links so only external resources show
+  const externalLinks = (selectedEvent.important_links || []).filter((link) => {
+    if (!link) return false;
+    const cleanLink = link.trim().toLowerCase();
+    if (selectedEvent.post_url && cleanLink === selectedEvent.post_url.trim().toLowerCase()) {
+      return false;
+    }
+    if (cleanLink.includes('instagram.com/p/') || cleanLink.includes('instagram.com/reel/')) {
+      return false;
+    }
+    return true;
+  });
+
   const handleCopyLocation = () => {
     navigator.clipboard.writeText(selectedEvent.location);
     setCopiedLocation(true);
@@ -112,20 +125,6 @@ export const EventDetailModal: React.FC = () => {
                 />
               </div>
             )}
-
-            {/* Instagram Origin overlay chip */}
-            {selectedEvent.post_url && (
-              <a
-                href={selectedEvent.post_url}
-                target="_blank"
-                rel="noreferrer"
-                title="View original Instagram post"
-                className="absolute bottom-2.5 right-2.5 flex items-center gap-1.5 rounded-lg bg-black/80 backdrop-blur-xs px-2.5 py-1 text-[11px] font-medium text-white hover:bg-black transition-colors shadow-xs"
-              >
-                <Instagram size={12} className="text-[#E1306C]" />
-                <span>View Post</span>
-              </a>
-            )}
           </div>
         )}
 
@@ -154,18 +153,6 @@ export const EventDetailModal: React.FC = () => {
                   </span>
                 );
               })()}
-              {selectedEvent.post_url && (
-                <a
-                  href={selectedEvent.post_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  title="View original Instagram post"
-                  className="inline-flex items-center gap-1 rounded-md border border-[#E1306C]/30 bg-[#E1306C]/10 px-2 py-0.5 text-[11px] font-semibold text-[#E1306C] hover:bg-[#E1306C]/20 transition-colors shadow-2xs"
-                >
-                  <Instagram size={11} />
-                  <span>Instagram</span>
-                </a>
-              )}
             </div>
 
             <button
@@ -273,16 +260,16 @@ export const EventDetailModal: React.FC = () => {
             )}
 
             {/* Important Links from backend */}
-            {selectedEvent.important_links && selectedEvent.important_links.length > 0 && (
+            {externalLinks.length > 0 && (
               <div>
                 <p className="text-[11px] font-semibold tracking-wider text-[var(--text-muted)] uppercase">
                   Important Links
                 </p>
                 <div className="mt-1.5 flex flex-wrap gap-2">
-                  {selectedEvent.important_links.map((link, idx) => (
+                  {externalLinks.map((link, idx) => (
                     <a
                       key={idx}
-                      href={link}
+                      href={link.startsWith('http') || link.startsWith('mailto:') ? link : `https://${link}`}
                       target="_blank"
                       rel="noreferrer"
                       className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] px-3 py-1.5 text-[12px] font-medium text-[var(--text-primary)] hover:border-[#cc0033] hover:text-[#cc0033] transition-colors shadow-2xs"
@@ -293,8 +280,10 @@ export const EventDetailModal: React.FC = () => {
                           ? 'Registration / RSVP Form'
                           : link.includes('discord')
                           ? 'Club Discord'
-                          : link.includes('instagram')
-                          ? 'Instagram Post'
+                          : link.includes('linktr.ee')
+                          ? 'Linktree'
+                          : link.startsWith('mailto:')
+                          ? link.replace('mailto:', '')
                           : link}
                       </span>
                     </a>
