@@ -222,7 +222,8 @@ async function downloadSnapshot(snapshotId) {
  * Sends records to local Next.js webhook and prints Gemini Vision results
  */
 async function sendRecordsToLocalApp(localBaseUrl, records) {
-  const webhookUrl = `${localBaseUrl}/api/webhooks/brightdata?secret=${BRIGHTDATA_WEBHOOK_SECRET}`;
+  const hasAllFlag = process.argv.includes("--all") || process.argv.includes("--all-posts");
+  const webhookUrl = `${localBaseUrl}/api/webhooks/brightdata?secret=${BRIGHTDATA_WEBHOOK_SECRET}${hasAllFlag ? "&all_posts=true" : ""}`;
   console.log(`📤 Sending records to local webhook: ${webhookUrl}`);
   console.log("🤖 Running Gemini Multimodal Vision extraction on post captions and flyer graphics...\n");
 

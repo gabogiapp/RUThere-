@@ -45,10 +45,18 @@ async function handleCronTrigger(req: NextRequest) {
     const batchSize = parseInt(process.env.SCRAPE_BATCH_SIZE || "20", 10);
     const batches = BrightDataClient.chunkArray(clubUrls, batchSize);
 
+    const maxPostsParam = searchParams.get("max_posts");
+    const allPostsParam = searchParams.get("all_posts");
+
     const host = req.headers.get("host") || "localhost:3000";
     const protocol = host.includes("localhost") ? "http" : "https";
     const secret = process.env.BRIGHTDATA_WEBHOOK_SECRET || "test_secret_token_123";
-    const webhookUrl = `${protocol}://${host}/api/webhooks/brightdata?secret=${encodeURIComponent(secret)}`;
+    let webhookUrl = `${protocol}://${host}/api/webhooks/brightdata?secret=${encodeURIComponent(secret)}`;
+    if (allPostsParam === "true" || allPostsParam === "1") {
+      webhookUrl += "&all_posts=true";
+    } else if (maxPostsParam) {
+      webhookUrl += `&max_posts=${encodeURIComponent(maxPostsParam)}`;
+    }
 
     const snapshotIds: string[] = [];
 
