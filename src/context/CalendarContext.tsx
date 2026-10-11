@@ -6,10 +6,13 @@ import {
   RutgersCampus,
 } from '../types/event';
 import { enrichEvent } from '../utils/dateUtils';
+import { ClubRecord } from '../../lib/types';
 
 interface CalendarContextType {
   events: CalendarEvent[];
   filteredEvents: CalendarEvent[];
+  clubs: ClubRecord[];
+  setClubs: (clubs: ClubRecord[]) => void;
   currentDate: Date;
   setCurrentDate: (date: Date) => void;
   goToToday: () => void;
@@ -32,6 +35,7 @@ const CalendarContext = createContext<CalendarContextType | null>(null);
 export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Grabs from live database via API; empty if no records exist
   const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [clubs, setClubs] = useState<ClubRecord[]>([]);
 
   // Current view date
   const [currentDate, setCurrentDate] = useState<Date>(() => new Date());
@@ -43,23 +47,31 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [selectedCampus, setSelectedCampus] = useState<RutgersCampus | 'All'>('All');
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
 
-  // Load events from live database via API
+  // Load events and clubs from live database via API
   const loadDatabaseData = async () => {
     try {
-      const res = await fetch('/api/events');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.events && Array.isArray(data.events) && data.events.length > 0) {
+      const [eventsRes, clubsRes] = await Promise.all([
+        fetch('/api/events'),
+        fetch('/api/clubs'),
+      ]);
+
+      if (eventsRes.ok) {
+        const data = await eventsRes.json();
+        if (data.events && Array.isArray(data.events)) {
           const enriched = data.events.map((item: any, idx: number) => enrichEvent(item, idx));
           setEvents(enriched);
-          return;
+        }
+      }
+
+      if (clubsRes.ok) {
+        const cData = await clubsRes.json();
+        if (cData.clubs && Array.isArray(cData.clubs)) {
+          setClubs(cData.clubs);
         }
       }
     } catch (err) {
-      console.warn('Failed to load events from /api/events:', err);
+      console.warn('Failed to load data from API:', err);
     }
-    // If it does not exist it should just be empty
-    setEvents([]);
   };
 
   useEffect(() => {
@@ -92,12 +104,28 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return events.filter(event => {
       // Search query
       if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
+        const q = searchQuery.toLowerCase().trim();
+        const qClean = q.replace(/^@/, '');
         const matchesTitle = event.title.toLowerCase().includes(q);
-        const matchesClub = event.club_name.toLowerCase().includes(q) || event.club_handle.toLowerCase().includes(q);
+        const matchesClub =
+          event.club_name.toLowerCase().includes(q) ||
+          event.club_handle.toLowerCase().includes(q) ||
+          event.club_handle.toLowerCase().replace(/^@/, '').includes(qClean);
         const matchesLoc = event.location.toLowerCase().includes(q);
         const matchesDesc = (event.description || '').toLowerCase().includes(q);
-        if (!matchesTitle && !matchesClub && !matchesLoc && !matchesDesc) {
+
+        // Also check if search query matches any interest tag of this event's club
+        const matchingClub = clubs.find(c => {
+          const cName = c.name.toLowerCase();
+          const cHandle = c.handle.toLowerCase().replace(/^@/, '');
+          const isThisClub =
+            event.club_name.toLowerCase().includes(cName) ||
+            event.club_handle.toLowerCase().replace(/^@/, '') === cHandle;
+          if (!isThisClub) return false;
+          return (c.interests || []).some(interest => interest.toLowerCase().includes(q));
+        });
+
+        if (!matchesTitle && !matchesClub && !matchesLoc && !matchesDesc && !matchingClub) {
           return false;
         }
       }
@@ -118,13 +146,15 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
       return true;
     });
-  }, [events, searchQuery, selectedCategory, selectedCampus]);
+  }, [events, clubs, searchQuery, selectedCategory, selectedCampus]);
 
   return (
     <CalendarContext.Provider
       value={{
         events,
         filteredEvents,
+        clubs,
+        setClubs,
         currentDate,
         setCurrentDate,
         goToToday,
