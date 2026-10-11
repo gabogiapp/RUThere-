@@ -250,6 +250,18 @@ export async function fetchGeminiWithRetry(
     try {
       const res = await fetch(targetUrl, options);
 
+      if (res.status === 401 || res.status === 403) {
+        console.warn(`[GeminiExtractor] Key ${keyInfo?.label || "active"} is disabled or invalid (HTTP ${res.status}). Quarantining key.`);
+        if (activeKey) {
+          keyPool.markCooldown(activeKey, 24 * 60 * 60 * 1000); // 24-hour quarantine
+        }
+        if (keyPool.activeKeyCount > 0) {
+          attempt++;
+          continue; // immediately retry with next active key in pool
+        }
+        return res;
+      }
+
       if (res.status === 429 || res.status === 503) {
         attempt++;
         const retryAfterHeader = res.headers.get("retry-after");
