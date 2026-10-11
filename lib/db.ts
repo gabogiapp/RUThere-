@@ -331,7 +331,8 @@ export async function updateEventVideo(eventId: string, videoUrl: string): Promi
 }
 
 export async function processAndStoreBrightData(
-  records: BrightDataProfileRecord[]
+  records: BrightDataProfileRecord[],
+  options?: { maxPostsPerClub?: number }
 ): Promise<{ clubsUpdated: number; eventsExtracted: number; events: EventRecord[] }> {
   let clubsUpdated = 0;
   const newEvents: EventRecord[] = [];
@@ -388,8 +389,19 @@ export async function processAndStoreBrightData(
     });
 
     // Pipeline Optimization 2: Top N Posts Limit (Default: Top 2 posts per handle)
-    const maxPostsPerClub = parseInt(process.env.MAX_POSTS_PER_CLUB || "2", 10);
-    const targetPosts = freshPosts.slice(0, maxPostsPerClub);
+    const envVal = process.env.MAX_POSTS_PER_CLUB?.trim().toLowerCase();
+    const isUnlimited = envVal === "all" || envVal === "0" || envVal === "unlimited";
+    const maxPostsPerClub =
+      options?.maxPostsPerClub !== undefined
+        ? options.maxPostsPerClub
+        : isUnlimited
+        ? Infinity
+        : parseInt(process.env.MAX_POSTS_PER_CLUB || "2", 10);
+
+    const targetPosts =
+      isFinite(maxPostsPerClub) && maxPostsPerClub > 0
+        ? freshPosts.slice(0, maxPostsPerClub)
+        : freshPosts;
 
     if (targetPosts.length > 0) {
       // Pipeline Optimization 3: Pre-Check Existing Posts in Neon to Avoid Redundant AI/Gemini Calls
