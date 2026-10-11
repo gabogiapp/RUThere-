@@ -348,7 +348,7 @@ export async function updateEventVideo(eventId: string, videoUrl: string): Promi
 
 export async function processAndStoreBrightData(
   records: BrightDataProfileRecord[],
-  options?: { maxPostsPerClub?: number }
+  options?: { maxPostsPerClub?: number; forceRefresh?: boolean }
 ): Promise<{ clubsUpdated: number; eventsExtracted: number; events: EventRecord[] }> {
   let clubsUpdated = 0;
   const newEvents: EventRecord[] = [];
@@ -422,7 +422,8 @@ export async function processAndStoreBrightData(
     if (targetPosts.length > 0) {
       // Pipeline Optimization 3: Pre-Check Existing Posts in Neon to Avoid Redundant AI/Gemini Calls
       let alreadySavedPostIds = new Set<string>();
-      if (db && club && club.id) {
+      const shouldCheckCache = !options?.forceRefresh && process.env.FORCE_REFRESH_POSTS !== "true";
+      if (shouldCheckCache && db && club && club.id) {
         try {
           const postIdsToCheck = targetPosts.map((p, idx) => String(p.id || p.url || `post_${idx}`));
           const existingRes = await db.query(

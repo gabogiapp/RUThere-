@@ -11,7 +11,8 @@
     "db:populate-real": "node scripts/populate-real-neon-data.js",
     "db:import-clubs": "node scripts/import-clubs.js",
     "cron:run": "node scripts/run-cron.js",
-    "cron:run-10": "node scripts/run-cron.js --max-posts=10"
+    "cron:run-10": "node scripts/run-cron.js --max-posts=10",
+    "cron:force-10": "node scripts/run-cron.js --max-posts=10 --force"
   },
   "dependencies": {
     "@neon/config": "^1.8.6",

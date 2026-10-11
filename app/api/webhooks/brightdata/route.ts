@@ -39,6 +39,7 @@ export async function POST(req: NextRequest) {
 
     const maxPostsParam = searchParams.get("max_posts");
     const allPostsParam = searchParams.get("all_posts");
+    const forceParam = searchParams.get("force");
     const parsedMaxPosts =
       allPostsParam === "true" || allPostsParam === "1"
         ? Infinity
@@ -46,7 +47,10 @@ export async function POST(req: NextRequest) {
         ? parseInt(maxPostsParam, 10)
         : undefined;
 
-    const result = await processAndStoreBrightData(records, { maxPostsPerClub: parsedMaxPosts });
+    const result = await processAndStoreBrightData(records, {
+      maxPostsPerClub: parsedMaxPosts,
+      forceRefresh: forceParam === "true" || forceParam === "1",
+    });
 
     console.log(`[/api/webhooks/brightdata] Ingestion success: ${result.clubsUpdated} clubs updated, ${result.eventsExtracted} events extracted.`);
 

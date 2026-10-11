@@ -46,9 +46,10 @@ async function downloadSnapshot(snapshotId) {
   return await res.json();
 }
 
-async function sendToWebhook(records, maxPosts = 10) {
-  const webhookUrl = `${BASE_URL}/api/webhooks/brightdata?secret=${encodeURIComponent(SECRET)}&max_posts=${maxPosts}`;
-  console.log(`\n📤 Ingesting ${records.length} club record(s) into webhook (${maxPosts} posts max)...`);
+async function sendToWebhook(records, maxPosts = 10, force = false) {
+  let webhookUrl = `${BASE_URL}/api/webhooks/brightdata?secret=${encodeURIComponent(SECRET)}&max_posts=${maxPosts}`;
+  if (force) webhookUrl += "&force=true";
+  console.log(`\n📤 Ingesting ${records.length} club record(s) into webhook (${maxPosts} posts max${force ? ", force refresh" : ""})...`);
   console.log(`🤖 Running Gemini Multimodal Vision + Free Food detection...`);
 
   const startTime = Date.now();
@@ -84,10 +85,12 @@ async function main() {
 
   const snapshotArg = args.find((a) => a.startsWith("--snapshot="));
   const directSnapshotId = snapshotArg ? snapshotArg.split("=")[1] : undefined;
+  const force = args.includes("--force");
 
   console.log("\n========================================================");
   console.log("     RUThere Cron Scrape & Event Ingestion Pipeline     ");
   console.log(`     Max Posts Per Account: ${maxPosts}                `);
+  if (force) console.log("     Force Refresh: YES (re-evaluating all posts)       ");
   console.log("========================================================\n");
 
   if (!API_KEY) {
@@ -119,7 +122,7 @@ async function main() {
     console.log(`📥 Downloading snapshot: ${directSnapshotId}...`);
     const records = await downloadSnapshot(directSnapshotId);
     if (Array.isArray(records)) {
-      await sendToWebhook(records, maxPosts);
+      await sendToWebhook(records, maxPosts, force);
     } else {
       console.error("❌ Snapshot response was not an array of records:", records);
     }
@@ -130,6 +133,7 @@ async function main() {
   let triggerUrl = `${BASE_URL}/api/cron/trigger-scrape?max_posts=${maxPosts}`;
   if (limit) triggerUrl += `&limit=${limit}`;
   if (handle) triggerUrl += `&handle=${encodeURIComponent(handle)}`;
+  if (force) triggerUrl += `&force=true`;
 
   console.log(`🚀 Triggering scrape cron job: ${triggerUrl}...`);
   const triggerRes = await fetch(triggerUrl);

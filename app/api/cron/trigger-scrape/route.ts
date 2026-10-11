@@ -47,6 +47,7 @@ async function handleCronTrigger(req: NextRequest) {
 
     const maxPostsParam = searchParams.get("max_posts");
     const allPostsParam = searchParams.get("all_posts");
+    const forceParam = searchParams.get("force");
 
     const host = req.headers.get("host") || "localhost:3000";
     const protocol = host.includes("localhost") ? "http" : "https";
@@ -56,6 +57,9 @@ async function handleCronTrigger(req: NextRequest) {
       webhookUrl += "&all_posts=true";
     } else if (maxPostsParam) {
       webhookUrl += `&max_posts=${encodeURIComponent(maxPostsParam)}`;
+    }
+    if (forceParam === "true" || forceParam === "1") {
+      webhookUrl += "&force=true";
     }
 
     const snapshotIds: string[] = [];
