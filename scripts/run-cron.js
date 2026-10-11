@@ -66,6 +66,7 @@ async function getRecentSnapshots() {
     headers: { Authorization: `Bearer ${API_KEY}` },
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+  const data = await res.json();
   if (!Array.isArray(data) || data.length === 0) return [];
   const latestTime = new Date(data[0].created).getTime();
   // Group all snapshots that were dispatched as part of the latest batch run (within 3 minutes of the latest snapshot)
