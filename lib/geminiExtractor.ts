@@ -55,10 +55,12 @@ export class GeminiKeyPool {
   }
 
   public get totalKeys(): number {
+    if (this.keys.length === 0) this.reloadKeys();
     return this.keys.length;
   }
 
   public get activeKeyCount(): number {
+    if (this.keys.length === 0) this.reloadKeys();
     const now = Date.now();
     return this.keys.filter((k) => k.cooldownUntil <= now).length;
   }
