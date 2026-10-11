@@ -427,7 +427,15 @@ export async function processAndStoreBrightData(
             eventTimeStr = new Date().toISOString();
           }
 
-          const videoUrl = post.video_url || post.video_play_url || extracted.video_url;
+          const isVideo =
+            Boolean(post.video_url || post.video_play_url || extracted.video_url) ||
+            post.content_type === "Video" ||
+            post.type === "Video";
+          const videoUrl =
+            post.video_url ||
+            post.video_play_url ||
+            extracted.video_url ||
+            (isVideo ? postUrl : undefined);
 
           const newEvent: EventRecord = {
             id: post.id || `post_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -446,6 +454,7 @@ export async function processAndStoreBrightData(
             important_links: combinedLinks,
             image_url: post.image_url || extracted.image_url,
             video_url: videoUrl,
+            is_video: isVideo,
             flyer_details: extracted.flyer_details || "",
             is_event: true,
             event_time: eventTimeStr,

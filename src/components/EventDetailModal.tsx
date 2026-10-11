@@ -18,9 +18,43 @@ import {
   Check,
   Users,
   Instagram,
-  Sparkles,
   Film,
+  Play,
+  Image as ImageIcon,
 } from 'lucide-react';
+
+/**
+ * Extracts Instagram embed URL from post or reel URL
+ */
+function getInstagramEmbedUrl(url?: string): string {
+  if (!url) return '';
+  const match = url.match(/instagram\.com\/(?:p|reel|tv)\/([^/?#&]+)/i);
+  if (match && match[1]) {
+    return `https://www.instagram.com/p/${match[1]}/embed/captioned=0`;
+  }
+  return '';
+}
+
+/**
+ * Checks if a URL points to a direct video file/stream
+ */
+function isDirectVideoUrl(url?: string): boolean {
+  if (!url) return false;
+  const lower = url.toLowerCase();
+  if (lower.includes('instagram.com/p/') || lower.includes('instagram.com/reel/')) {
+    return false;
+  }
+  return (
+    lower.includes('.mp4') ||
+    lower.includes('.webm') ||
+    lower.includes('.mov') ||
+    lower.includes('.ogg') ||
+    lower.includes('blob:') ||
+    lower.includes('/video/') ||
+    lower.includes('googlevideo') ||
+    (lower.includes('cdninstagram.com') && lower.includes('mp4'))
+  );
+}
 
 export const EventDetailModal: React.FC = () => {
   const {
@@ -31,6 +65,7 @@ export const EventDetailModal: React.FC = () => {
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedLocation, setCopiedLocation] = useState(false);
   const [mediaError, setMediaError] = useState(false);
+  const [isPlayingVideo, setIsPlayingVideo] = useState(false);
 
   // Close popup when Escape key is pressed
   useEffect(() => {
@@ -43,17 +78,32 @@ export const EventDetailModal: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [setSelectedEvent]);
 
-  // Reset media error when selectedEvent changes
+  // Reset states when selectedEvent changes
   useEffect(() => {
     setMediaError(false);
+    // If the event is primarily a video with no image, default to playing video
+    if (selectedEvent) {
+      const directVid = isDirectVideoUrl(selectedEvent.video_url);
+      const igEmbed = getInstagramEmbedUrl(selectedEvent.video_url || (selectedEvent.is_video ? selectedEvent.post_url : undefined));
+      const hasVid = directVid || Boolean(igEmbed) || Boolean(selectedEvent.is_video);
+      setIsPlayingVideo(hasVid && !selectedEvent.image_url);
+    } else {
+      setIsPlayingVideo(false);
+    }
   }, [selectedEvent?.id]);
 
   if (!selectedEvent) return null;
 
   const palette = COLOR_MAP[selectedEvent.color_scheme];
-  const hasVideo = Boolean(selectedEvent.video_url && !mediaError);
-  const hasImage = Boolean(selectedEvent.image_url && !hasVideo && !mediaError);
-  const hasMedia = hasVideo || hasImage;
+
+  // Video determination
+  const isDirectVideo = isDirectVideoUrl(selectedEvent.video_url);
+  const igEmbedUrl = getInstagramEmbedUrl(
+    selectedEvent.video_url || (selectedEvent.is_video ? selectedEvent.post_url : undefined)
+  );
+  const hasPlayableVideo = isDirectVideo || Boolean(igEmbedUrl) || Boolean(selectedEvent.is_video);
+  const hasImage = Boolean(selectedEvent.image_url && !mediaError);
+  const hasMedia = hasPlayableVideo || hasImage;
 
   // Filter out redundant origin post links from important_links so only external resources show
   const externalLinks = (selectedEvent.important_links || []).filter((link) => {
@@ -96,33 +146,103 @@ export const EventDetailModal: React.FC = () => {
         } max-h-[90vh] md:max-h-[85vh] flex flex-col md:flex-row overflow-hidden rounded-2xl border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-2xl transition-all`}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Left Side: Media Column (Image or Video) */}
+        {/* Left Side: Media Column (Image or Playable Video) */}
         {hasMedia && (
-          <div className="w-full md:w-[44%] lg:w-[42%] bg-black/95 dark:bg-black flex flex-col items-center justify-center p-3 sm:p-4 relative shrink-0 border-b md:border-b-0 md:border-r border-[var(--border-subtle)] overflow-hidden max-h-[36vh] md:max-h-[85vh]">
-            {hasVideo ? (
-              <div className="relative w-full h-full flex flex-col items-center justify-center">
-                <video
-                  src={selectedEvent.video_url}
-                  controls
-                  playsInline
-                  preload="metadata"
-                  className="w-full max-h-[30vh] md:max-h-[76vh] object-contain rounded-xl shadow-lg bg-black"
-                  onError={() => setMediaError(true)}
-                />
-                <div className="absolute top-2 left-2 flex items-center gap-1 rounded-md bg-black/75 backdrop-blur-xs px-2 py-0.5 text-[10px] font-semibold text-white/90 shadow-xs pointer-events-none">
+          <div className="w-full md:w-[44%] lg:w-[42%] bg-black/95 dark:bg-black flex flex-col items-center justify-center p-3 sm:p-4 relative shrink-0 border-b md:border-b-0 md:border-r border-[var(--border-subtle)] overflow-hidden max-h-[38vh] md:max-h-[85vh]">
+            {/* View switcher toggle if event has BOTH video and image */}
+            {hasPlayableVideo && hasImage && (
+              <div className="absolute top-2.5 right-2.5 z-20">
+                {isPlayingVideo ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsPlayingVideo(false)}
+                    className="flex items-center gap-1.5 rounded-lg bg-black/80 backdrop-blur-xs px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-black transition-colors shadow-md cursor-pointer border border-white/20"
+                    title="View flyer poster image"
+                  >
+                    <ImageIcon size={12} />
+                    <span>View Flyer</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setIsPlayingVideo(true)}
+                    className="flex items-center gap-1.5 rounded-lg bg-[#E1306C] hover:bg-[#d0245f] text-white px-2.5 py-1 text-[11px] font-semibold transition-all shadow-md cursor-pointer active:scale-95"
+                    title="Play post video"
+                  >
+                    <Play size={12} className="fill-current" />
+                    <span>Play Video</span>
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Playable Video View */}
+            {isPlayingVideo || (!hasImage && hasPlayableVideo) ? (
+              <div className="relative w-full h-full min-h-[250px] md:min-h-[420px] flex flex-col items-center justify-center">
+                {isDirectVideo ? (
+                  <video
+                    key={selectedEvent.video_url}
+                    src={selectedEvent.video_url}
+                    controls
+                    autoPlay
+                    playsInline
+                    loop
+                    preload="auto"
+                    poster={selectedEvent.image_url}
+                    className="w-full max-h-[36vh] md:max-h-[80vh] object-contain rounded-xl shadow-lg bg-black"
+                    onError={() => {
+                      // Fallback to image if direct video source fails
+                      setIsPlayingVideo(false);
+                      setMediaError(true);
+                    }}
+                  />
+                ) : igEmbedUrl ? (
+                  <iframe
+                    src={igEmbedUrl}
+                    className="w-full h-full min-h-[280px] md:min-h-[500px] rounded-xl border-0 bg-black shadow-lg"
+                    allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
+                    allowFullScreen
+                    title="Instagram Video Player"
+                  />
+                ) : (
+                  <video
+                    src={selectedEvent.video_url}
+                    controls
+                    autoPlay
+                    playsInline
+                    loop
+                    className="w-full max-h-[36vh] md:max-h-[80vh] object-contain rounded-xl shadow-lg bg-black"
+                  />
+                )}
+                <div className="absolute bottom-2 left-2 flex items-center gap-1 rounded-md bg-black/75 backdrop-blur-xs px-2 py-0.5 text-[10px] font-semibold text-white/90 shadow-xs pointer-events-none">
                   <Film size={11} className="text-[#E1306C]" />
-                  <span>Video</span>
+                  <span>Playing Video</span>
                 </div>
               </div>
             ) : (
+              /* Flyer Image View with optional Play Overlay */
               <div className="relative w-full h-full flex items-center justify-center group">
                 <img
                   src={selectedEvent.image_url}
                   alt={selectedEvent.title}
-                  className="w-full max-h-[32vh] md:max-h-[76vh] object-contain rounded-xl shadow-lg transition-transform duration-300 group-hover:scale-[1.01]"
+                  className="w-full max-h-[34vh] md:max-h-[80vh] object-contain rounded-xl shadow-lg transition-transform duration-300 group-hover:scale-[1.01]"
                   loading="lazy"
                   onError={() => setMediaError(true)}
                 />
+
+                {/* Big Center Play Button Overlay if post has video */}
+                {hasPlayableVideo && (
+                  <button
+                    type="button"
+                    onClick={() => setIsPlayingVideo(true)}
+                    className="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-black/40 transition-colors group/play cursor-pointer rounded-xl"
+                    title="Click to play video"
+                  >
+                    <div className="flex size-14 items-center justify-center rounded-full bg-[#E1306C] text-white shadow-xl transition-transform duration-200 group-hover/play:scale-110 active:scale-95">
+                      <Play size={24} className="ml-1 fill-current" />
+                    </div>
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -153,6 +273,12 @@ export const EventDetailModal: React.FC = () => {
                   </span>
                 );
               })()}
+              {hasPlayableVideo && (
+                <span className="inline-flex items-center gap-1 rounded-md border border-[#E1306C]/30 bg-[#E1306C]/10 px-2 py-0.5 text-[11px] font-semibold text-[#E1306C]">
+                  <Film size={11} />
+                  <span>Video Post</span>
+                </span>
+              )}
             </div>
 
             <button
@@ -233,19 +359,6 @@ export const EventDetailModal: React.FC = () => {
                 </div>
               </div>
             </div>
-
-            {/* Gemini Vision Extracted Flyer Details */}
-            {selectedEvent.flyer_details && (
-              <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 p-3 text-[12px] text-[var(--text-secondary)] shadow-2xs">
-                <div className="flex items-center gap-1.5 font-semibold text-purple-600 dark:text-purple-400">
-                  <Sparkles size={13} />
-                  <span>Extracted from Flyer Graphic</span>
-                </div>
-                <p className="mt-1 leading-relaxed text-[var(--text-primary)]">
-                  {selectedEvent.flyer_details}
-                </p>
-              </div>
-            )}
 
             {/* Description */}
             {selectedEvent.description && (

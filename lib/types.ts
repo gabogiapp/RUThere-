@@ -60,6 +60,7 @@ export interface EventRecord {
   created_at?: string;
   image_url?: string;
   video_url?: string;
+  is_video?: boolean;
   flyer_details?: string;
   extraction_source?: "gemini" | "heuristic";
 }
@@ -76,6 +77,7 @@ export interface ExtractedEventSchema {
   post_url?: string;
   image_url?: string;
   video_url?: string;
+  is_video?: boolean;
   flyer_details?: string;
 }
 

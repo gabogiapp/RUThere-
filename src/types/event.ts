@@ -18,6 +18,7 @@ export interface BackendEventItem {
   post_url?: string;
   image_url?: string;
   video_url?: string;
+  is_video?: boolean;
   flyer_details?: string;
   extraction_source?: 'gemini' | 'heuristic';
 }
