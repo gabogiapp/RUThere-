@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import { Pool } from "pg";
 import { ClubRecord, EventRecord, BrightDataProfileRecord } from "./types";
-import { extractEventsBatchWithGemini } from "./geminiExtractor";
+import { extractEventsBatchWithGemini, extractClubInterestsWithGemini } from "./geminiExtractor";
 
 let pool: Pool | null = null;
 
@@ -69,7 +69,7 @@ export async function getClubs(): Promise<ClubRecord[]> {
 
   try {
     const res = await db.query(
-      "SELECT id, handle, name, category, url, biography, followers, following, posts_count FROM clubs ORDER BY name ASC"
+      "SELECT id, handle, name, category, url, biography, followers, following, posts_count, interests, related_interests FROM clubs ORDER BY name ASC"
     );
     return res.rows;
   } catch (err) {
@@ -91,6 +91,8 @@ export async function upsertClub(club: Partial<ClubRecord>): Promise<ClubRecord>
     followers: club.followers,
     following: club.following,
     posts_count: club.posts_count,
+    interests: club.interests,
+    related_interests: club.related_interests,
   };
 
   if (!db) {
@@ -109,8 +111,8 @@ export async function upsertClub(club: Partial<ClubRecord>): Promise<ClubRecord>
 
   try {
     const res = await db.query(
-      `INSERT INTO clubs (handle, name, category, url, biography, followers, following, posts_count)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `INSERT INTO clubs (handle, name, category, url, biography, followers, following, posts_count, interests, related_interests)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        ON CONFLICT (handle) DO UPDATE SET
          name = EXCLUDED.name,
          category = COALESCE(clubs.category, EXCLUDED.category),
@@ -118,7 +120,9 @@ export async function upsertClub(club: Partial<ClubRecord>): Promise<ClubRecord>
          biography = COALESCE(EXCLUDED.biography, clubs.biography),
          followers = COALESCE(EXCLUDED.followers, clubs.followers),
          following = COALESCE(EXCLUDED.following, clubs.following),
-         posts_count = COALESCE(EXCLUDED.posts_count, clubs.posts_count)
+         posts_count = COALESCE(EXCLUDED.posts_count, clubs.posts_count),
+         interests = COALESCE(EXCLUDED.interests, clubs.interests),
+         related_interests = COALESCE(EXCLUDED.related_interests, clubs.related_interests)
        RETURNING *`,
       [
         record.handle,
@@ -129,6 +133,8 @@ export async function upsertClub(club: Partial<ClubRecord>): Promise<ClubRecord>
         record.followers || null,
         record.following || null,
         record.posts_count || null,
+        record.interests || null,
+        record.related_interests || null,
       ]
     );
     return res.rows[0];
@@ -311,6 +317,14 @@ export async function processAndStoreBrightData(
     const handle = rec.account || (rec.url ? rec.url.split("/").filter(Boolean).pop() : "");
     if (!handle) continue;
 
+    const captions = (rec.posts || []).map((p) => p.caption || "").filter(Boolean);
+    const taxonomy = await extractClubInterestsWithGemini({
+      name: rec.full_name || handle,
+      handle,
+      biography: rec.biography,
+      captions,
+    });
+
     const club = await upsertClub({
       handle,
       name: rec.full_name || handle,
@@ -319,6 +333,8 @@ export async function processAndStoreBrightData(
       following: rec.following,
       posts_count: rec.posts_count,
       url: rec.url || `https://www.instagram.com/${handle}`,
+      interests: taxonomy.primary,
+      related_interests: taxonomy.related,
     });
     clubsUpdated++;
 

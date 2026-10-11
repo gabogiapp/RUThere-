@@ -391,3 +391,108 @@ export async function extractEventsBatchWithGemini(
 
   return resultMap;
 }
+
+export interface ClubTaxonomyResult {
+  primary: string[];
+  related: string[];
+}
+
+/**
+ * Extract or infer two-tier search interest tags (primary focus vs related topics) for a club
+ */
+export async function extractClubInterestsWithGemini(club: {
+  name: string;
+  handle: string;
+  biography?: string;
+  category?: string;
+  captions?: string[];
+}): Promise<ClubTaxonomyResult> {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) {
+    return inferInterestsHeuristically(club);
+  }
+  try {
+    const prompt = `You are an expert taxonomy tagger for Rutgers University student clubs.
+Generate two tiers of interests for this club:
+1. "primary": 4 to 8 core specific interests and direct activities of the club.
+2. "related": 4 to 8 broader academic fields, parent domains, or sub-disciplines related to this club (e.g. for an AI club, related includes "computer science", "data science"; for a CS club, related includes "artificial intelligence", "cybersecurity").
+
+Club Name: ${club.name}
+Handle: @${club.handle}
+Category: ${club.category || "General"}
+Bio: ${club.biography || ""}
+Recent activity: ${(club.captions || []).slice(0, 3).join(" ")}
+
+Respond ONLY with a valid JSON object in this exact shape:
+{
+  "primary": ["specific topic 1", "specific topic 2"],
+  "related": ["related topic 1", "related topic 2"]
+}
+No markdown backticks.`;
+
+    const res = await fetch(`${GEMINI_BASE_URL}/models/${GEMINI_MODEL}:generateContent?key=${key}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.2, maxOutputTokens: 350 },
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      const cleanJson = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();
+      const parsed = JSON.parse(cleanJson);
+      if (parsed && Array.isArray(parsed.primary) && Array.isArray(parsed.related)) {
+        return {
+          primary: parsed.primary.map((s: string) => String(s).toLowerCase().trim()).filter(Boolean),
+          related: parsed.related.map((s: string) => String(s).toLowerCase().trim()).filter(Boolean),
+        };
+      }
+    }
+  } catch (err) {
+    console.warn("[GeminiExtractor] Could not extract interests with Gemini, using fallback:", err);
+  }
+  return inferInterestsHeuristically(club);
+}
+
+export function inferInterestsHeuristically(club: {
+  name: string;
+  handle: string;
+  biography?: string;
+  category?: string;
+}): ClubTaxonomyResult {
+  const text = `${club.name} ${club.handle} ${club.category || ""} ${club.biography || ""}`.toLowerCase();
+  const primary = new Set<string>();
+  const related = new Set<string>();
+
+  if (club.category) {
+    primary.add(club.category.toLowerCase());
+  }
+
+  const keywordMap: Record<string, { pri: string[]; rel: string[] }> = {
+    tech: { pri: ["tech", "coding", "software engineering"], rel: ["computer science", "artificial intelligence", "cybersecurity"] },
+    code: { pri: ["coding", "programming", "software engineering"], rel: ["computer science", "web dev", "algorithms"] },
+    hack: { pri: ["hackathons", "coding"], rel: ["software engineering", "tech careers"] },
+    ai: { pri: ["artificial intelligence", "machine learning", "deep learning"], rel: ["computer science", "data science", "robotics"] },
+    game: { pri: ["gaming", "video games", "esports"], rel: ["discord", "entertainment", "recreation"] },
+    climb: { pri: ["rock climbing", "bouldering", "climbing"], rel: ["outdoors", "fitness", "athletics"] },
+    rec: { pri: ["fitness", "recreation", "gym"], rel: ["sports", "wellness", "athletics"] },
+    sport: { pri: ["sports", "athletics"], rel: ["fitness", "recreation"] },
+    business: { pri: ["business", "networking"], rel: ["finance", "consulting"] },
+  };
+
+  for (const [kw, def] of Object.entries(keywordMap)) {
+    if (text.includes(kw)) {
+      def.pri.forEach((s) => primary.add(s));
+      def.rel.forEach((s) => related.add(s));
+    }
+  }
+
+  return {
+    primary: Array.from(primary),
+    related: Array.from(related),
+  };
+}
+

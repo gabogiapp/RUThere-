@@ -52,6 +52,7 @@ async function setup() {
 
       -- Add columns if existing table didn't have them
       ALTER TABLE clubs ADD COLUMN IF NOT EXISTS last_scraped_at TIMESTAMP WITH TIME ZONE;
+      ALTER TABLE clubs ADD COLUMN IF NOT EXISTS interests TEXT[];
       ALTER TABLE events ADD COLUMN IF NOT EXISTS campus VARCHAR(100);
       ALTER TABLE events ADD COLUMN IF NOT EXISTS category VARCHAR(100);
       ALTER TABLE events ADD COLUMN IF NOT EXISTS image_url TEXT;
@@ -61,6 +62,7 @@ async function setup() {
 
       CREATE INDEX IF NOT EXISTS idx_events_time ON events(event_time);
       CREATE INDEX IF NOT EXISTS idx_events_club_id ON events(club_id);
+      CREATE INDEX IF NOT EXISTS idx_clubs_interests ON clubs USING GIN(interests);
     `);
     console.log("✓ Tables and indexes created successfully.");
 

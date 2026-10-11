@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -19,6 +19,8 @@ import {
   isSameDay,
   formatIsoDate,
 } from '../utils/dateUtils';
+import { SearchDropdown } from './SearchDropdown';
+import { getBestMatches, SearchResultItem } from '../utils/searchEngine';
 
 const CAMPUSES: (RutgersCampus | 'All')[] = [
   'All',
@@ -50,21 +52,73 @@ export const Header: React.FC = () => {
     setSelectedCategory,
     selectedCampus,
     setSelectedCampus,
+    selectedEvent,
+    setSelectedEvent,
     events,
+    clubs,
   } = useCalendar();
 
   const [campusDropdownOpen, setCampusDropdownOpen] = useState(false);
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
   const [calendarPopoverOpen, setCalendarPopoverOpen] = useState(false);
+  const [searchDropdownOpen, setSearchDropdownOpen] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(0);
 
   const campusRef = useRef<HTMLDivElement>(null);
   const categoryRef = useRef<HTMLDivElement>(null);
   const monthRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLDivElement>(null);
+
+  // Compute best matches sorted strictly by relevance
+  const searchMatches = useMemo(() => {
+    return getBestMatches(searchQuery, clubs, events, 8);
+  }, [searchQuery, clubs, events]);
+
+  // Handle selecting a search result
+  const handleSelectResult = (item: SearchResultItem) => {
+    if (item.type === 'club' && item.club) {
+      setSearchQuery(item.club.name);
+      setSearchDropdownOpen(false);
+    } else if (item.type === 'event' && item.event) {
+      setSelectedEvent(item.event);
+      setSearchDropdownOpen(false);
+    }
+  };
+
+  // Handle keyboard navigation inside search input
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!searchDropdownOpen || searchMatches.length === 0) {
+      if (e.key === 'ArrowDown' && searchMatches.length > 0) {
+        e.preventDefault();
+        setSearchDropdownOpen(true);
+      }
+      return;
+    }
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setSelectedIndex((prev) => (prev + 1) % searchMatches.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSelectedIndex((prev) => (prev - 1 + searchMatches.length) % searchMatches.length);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const selected = searchMatches[selectedIndex];
+      if (selected) {
+        handleSelectResult(selected);
+      }
+    } else if (e.key === 'Escape') {
+      setSearchDropdownOpen(false);
+    }
+  };
 
   // Close popovers when clicking outside or pressing Escape
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as Node;
+      if (searchRef.current && !searchRef.current.contains(target)) {
+        setSearchDropdownOpen(false);
+      }
       if (campusRef.current && !campusRef.current.contains(target)) {
         setCampusDropdownOpen(false);
       }
@@ -78,6 +132,7 @@ export const Header: React.FC = () => {
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        setSearchDropdownOpen(false);
         setCampusDropdownOpen(false);
         setCategoryDropdownOpen(false);
         setCalendarPopoverOpen(false);
@@ -116,27 +171,48 @@ export const Header: React.FC = () => {
       <div className="flex h-14 items-center justify-between gap-2 px-3 md:px-5">
         
         {/* 1. Left Group: Search Bar */}
-        <div className="relative flex flex-1 max-w-xs sm:max-w-sm md:max-w-md items-center min-w-[130px]">
+        <div ref={searchRef} className="relative flex flex-1 max-w-xs sm:max-w-sm md:max-w-md items-center min-w-[130px]">
           <Search
             size={15}
             className="absolute left-3 text-gray-400 pointer-events-none"
           />
           <input
             type="text"
-            placeholder="Search clubs, rooms..."
+            placeholder="Search clubs, rooms, interests..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onFocus={() => {
+              if (searchQuery.trim()) setSearchDropdownOpen(true);
+            }}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setSelectedIndex(0);
+              setSearchDropdownOpen(true);
+            }}
+            onKeyDown={handleInputKeyDown}
             className="h-9 w-full rounded-xl bg-white pl-9 pr-8 text-[13px] text-[#141414] placeholder-gray-400 outline-none ring-1 ring-black/10 focus:ring-2 focus:ring-white transition-all shadow-xs"
           />
           {searchQuery && (
             <button
               type="button"
-              onClick={() => setSearchQuery('')}
+              onClick={() => {
+                setSearchQuery('');
+                setSearchDropdownOpen(false);
+              }}
               className="absolute right-2 flex size-5 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700"
             >
               <X size={12} />
             </button>
           )}
+
+          {/* Live Search Dropdown */}
+          <SearchDropdown
+            results={searchMatches}
+            selectedIndex={selectedIndex}
+            isOpen={searchDropdownOpen}
+            query={searchQuery}
+            onSelectResult={handleSelectResult}
+            onMouseEnterItem={setSelectedIndex}
+          />
         </div>
 
         {/* 2. Middle Group: Campus & Club Category Dropdowns */}

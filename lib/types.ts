@@ -37,6 +37,8 @@ export interface ClubRecord {
   followers?: number;
   following?: number;
   posts_count?: number;
+  interests?: string[];
+  related_interests?: string[];
 }
 
 export interface EventRecord {

@@ -23,11 +23,11 @@ async function populateRealData() {
 
     // 2. Insert real scraped Rutgers clubs from Bright Data Instagram dataset
     const clubsSql = `
-      INSERT INTO clubs (handle, name, category, url, followers, biography) VALUES
-        ('rutgers_usacs', 'Undergraduate Student Alliance of Computer Scientists (USACS)', 'Tech & Coding', 'https://www.instagram.com/rutgers_usacs', 2590, 'Official undergraduate computer science student organization at Rutgers University New Brunswick.'),
-        ('rutgersesports', 'Rutgers Esports', 'Sports & Recreation', 'https://www.instagram.com/rutgersesports', 3110, 'Official competitive gaming and esports student association at Rutgers University.'),
-        ('rutgersu', 'Rutgers University', 'General', 'https://www.instagram.com/rutgersu', 155729, 'The State University of New Jersey #Rutgers - Official Institutional Profile.'),
-        ('rutgersrec', 'Rutgers Recreation', 'Sports & Recreation', 'https://www.instagram.com/rutgersrec', 8400, 'Rutgers University Recreation: fitness, intramural sports, outdoor recreation, and aquatic centers across all campuses.')
+      INSERT INTO clubs (handle, name, category, url, followers, biography, interests) VALUES
+        ('rutgers_usacs', 'Undergraduate Student Alliance of Computer Scientists (USACS)', 'Tech & Coding', 'https://www.instagram.com/rutgers_usacs', 2590, 'Official undergraduate computer science student organization at Rutgers University New Brunswick.', ARRAY['coding', 'computer science', 'software engineering', 'tech', 'web dev', 'hackathons', 'mock interviews', 'python', 'algorithms', 'faang', 'programming', 'internships']),
+        ('rutgersesports', 'Rutgers Esports', 'Sports & Recreation', 'https://www.instagram.com/rutgersesports', 3110, 'Official competitive gaming and esports student association at Rutgers University.', ARRAY['gaming', 'video games', 'esports', 'competitive gaming', 'tournaments', 'smash bros', 'valorant', 'league of legends', 'lan party', 'discord', 'casual gaming', 'pc gaming']),
+        ('rutgersu', 'Rutgers University', 'General', 'https://www.instagram.com/rutgersu', 155729, 'The State University of New Jersey #Rutgers - Official Institutional Profile.', ARRAY['campus events', 'traditions', 'student life', 'university news', 'academics', 'scarlet knights']),
+        ('rutgersrec', 'Rutgers Recreation', 'Sports & Recreation', 'https://www.instagram.com/rutgersrec', 8400, 'Rutgers University Recreation: fitness, intramural sports, outdoor recreation, and aquatic centers across all campuses.', ARRAY['fitness', 'gym', 'intramural sports', 'recreation', 'aquatics', 'swimming', 'wellness', 'workouts', 'outdoor recreation'])
       RETURNING id, handle, name;
     `;
     const clubRows = await pool.query(clubsSql);
