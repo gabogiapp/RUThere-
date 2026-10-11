@@ -243,34 +243,88 @@ export async function processAndStoreBrightData(
     });
     clubsUpdated++;
 
+    // Update last_scraped_at timestamp for this club
+    if (db && club && club.id) {
+      try {
+        await db.query("UPDATE clubs SET last_scraped_at = NOW() WHERE id = $1", [club.id]);
+      } catch (e) {
+        console.warn(`Could not update last_scraped_at for club ${handle}:`, e);
+      }
+    }
+
     const posts = rec.posts || [];
     // Include posts with captions, flyer images, or videos
-    const postsWithContent = posts.filter((p) => (p.caption && p.caption.trim()) || p.image_url || p.video_url || p.video_play_url);
-    const targetPosts = postsWithContent.slice(0, 8);
+    const postsWithContent = posts.filter(
+      (p) => (p.caption && p.caption.trim()) || p.image_url || p.video_url || p.video_play_url
+    );
+
+    // Pipeline Optimization 1: Configurable Recency Gate (Default: 21 days)
+    const maxPostAgeDays = parseInt(process.env.MAX_POST_AGE_DAYS || "21", 10);
+    const nowMs = Date.now();
+    const maxAgeMs = maxPostAgeDays * 24 * 60 * 60 * 1000;
+
+    const freshPosts = postsWithContent.filter((p) => {
+      if (!p.datetime) return true; // keep if unknown date
+      const postTime = new Date(p.datetime).getTime();
+      if (isNaN(postTime)) return true;
+      return nowMs - postTime <= maxAgeMs;
+    });
+
+    // Pipeline Optimization 2: Top N Posts Limit (Default: Top 3 posts per handle)
+    const maxPostsPerClub = parseInt(process.env.MAX_POSTS_PER_CLUB || "3", 10);
+    const targetPosts = freshPosts.slice(0, maxPostsPerClub);
 
     if (targetPosts.length > 0) {
-      const batchInput = targetPosts.map((p, idx) => {
+      // Pipeline Optimization 3: Pre-Check Existing Posts in Neon to Avoid Redundant AI/Gemini Calls
+      let alreadySavedPostIds = new Set<string>();
+      if (db && club && club.id) {
+        try {
+          const postIdsToCheck = targetPosts.map((p, idx) => String(p.id || p.url || `post_${idx}`));
+          const existingRes = await db.query(
+            "SELECT instagram_post_id FROM events WHERE instagram_post_id = ANY($1)",
+            [postIdsToCheck]
+          );
+          alreadySavedPostIds = new Set(existingRes.rows.map((r: any) => r.instagram_post_id));
+        } catch (err) {
+          console.warn("Could not pre-check existing posts in DB:", err);
+        }
+      }
+
+      // Filter down to only posts that actually require Gemini AI extraction
+      const postsNeedingExtraction = targetPosts.filter((p, idx) => {
         const rawId = String(p.id || p.url || `post_${idx}`);
-        const postUrl =
-          p.url ||
-          (p.id && !p.id.startsWith("http")
-            ? `https://www.instagram.com/p/${p.id}`
-            : `https://www.instagram.com/${handle}`);
-        const videoUrl = p.video_url || p.video_play_url || undefined;
-        return {
-          post_id: rawId,
-          caption: p.caption || "",
-          image_url: p.image_url,
-          video_url: videoUrl,
-          post_url: postUrl,
-          club_name: club.name,
-          club_handle: `@${handle}`,
-          club_category: club.category,
-        };
+        return !alreadySavedPostIds.has(rawId);
       });
 
-      // Extract events via Gemini Multimodal Vision API adhering to example.json
-      const geminiResults = await extractEventsBatchWithGemini(batchInput);
+      let geminiResults = new Map<string, any>();
+      if (postsNeedingExtraction.length > 0) {
+        console.log(
+          `[/api/webhooks/brightdata] Extracting ${postsNeedingExtraction.length} new post(s) for ${handle} via Gemini Vision...`
+        );
+        const batchInput = postsNeedingExtraction.map((p, idx) => {
+          const rawId = String(p.id || p.url || `post_${idx}`);
+          const postUrl =
+            p.url ||
+            (p.id && !p.id.startsWith("http")
+              ? `https://www.instagram.com/p/${p.id}`
+              : `https://www.instagram.com/${handle}`);
+          const videoUrl = p.video_url || p.video_play_url || undefined;
+          return {
+            post_id: rawId,
+            caption: p.caption || "",
+            image_url: p.image_url,
+            video_url: videoUrl,
+            post_url: postUrl,
+            club_name: club.name,
+            club_handle: `@${handle}`,
+            club_category: club.category,
+          };
+        });
+
+        geminiResults = await extractEventsBatchWithGemini(batchInput);
+      } else {
+        console.log(`[/api/webhooks/brightdata] All top ${targetPosts.length} posts for ${handle} are already in DB; skipping AI calls.`);
+      }
 
       for (let idx = 0; idx < targetPosts.length; idx++) {
         const post = targetPosts[idx];
@@ -322,19 +376,28 @@ export async function processAndStoreBrightData(
             extraction_source: extracted.extraction_source,
           };
 
-          // If connected to Neon Postgres, also persist directly
+          // If connected to Neon Postgres, persist complete multimodal attributes
           if (db && club && club.id) {
             try {
               await db.query(
-                `INSERT INTO events (club_id, instagram_post_id, post_url, title, event_time, location, description)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7)
-                 ON CONFLICT (instagram_post_id) DO UPDATE SET
-                   club_id = EXCLUDED.club_id,
-                   post_url = EXCLUDED.post_url,
-                   title = EXCLUDED.title,
-                   event_time = COALESCE(EXCLUDED.event_time, events.event_time),
-                   location = COALESCE(EXCLUDED.location, events.location),
-                   description = EXCLUDED.description`,
+                `INSERT INTO events (
+                  club_id, instagram_post_id, post_url, title, event_time, location,
+                  description, campus, category, image_url, video_url, flyer_details, extraction_source
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                ON CONFLICT (instagram_post_id) DO UPDATE SET
+                  club_id = EXCLUDED.club_id,
+                  post_url = EXCLUDED.post_url,
+                  title = EXCLUDED.title,
+                  event_time = COALESCE(EXCLUDED.event_time, events.event_time),
+                  location = COALESCE(EXCLUDED.location, events.location),
+                  description = EXCLUDED.description,
+                  campus = COALESCE(EXCLUDED.campus, events.campus),
+                  category = COALESCE(EXCLUDED.category, events.category),
+                  image_url = COALESCE(EXCLUDED.image_url, events.image_url),
+                  video_url = COALESCE(EXCLUDED.video_url, events.video_url),
+                  flyer_details = COALESCE(EXCLUDED.flyer_details, events.flyer_details),
+                  extraction_source = COALESCE(EXCLUDED.extraction_source, events.extraction_source)`,
                 [
                   club.id,
                   postId,
@@ -343,6 +406,12 @@ export async function processAndStoreBrightData(
                   eventTimeStr,
                   extracted.location,
                   post.caption || "",
+                  extracted.campus || "College Ave",
+                  extracted.category || club.category || "Social & Student Life",
+                  post.image_url || extracted.image_url || null,
+                  videoUrl || null,
+                  extracted.flyer_details || null,
+                  extracted.extraction_source || "gemini_multimodal",
                 ]
               );
             } catch (err) {

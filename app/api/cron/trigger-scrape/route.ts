@@ -12,7 +12,24 @@ export async function POST(req: NextRequest) {
 
 async function handleCronTrigger(req: NextRequest) {
   try {
-    const clubs = await getClubs();
+    const { searchParams } = new URL(req.url);
+    const targetHandle = searchParams.get("handle")?.replace(/^@/, "").trim().toLowerCase();
+    const limitParam = searchParams.get("limit");
+    const limit = limitParam ? parseInt(limitParam, 10) : undefined;
+
+    let clubs = await getClubs();
+
+    // If specific handle requested, filter strictly to that handle
+    if (targetHandle) {
+      clubs = clubs.filter((c) => c.handle.toLowerCase() === targetHandle);
+      if (clubs.length === 0) {
+        // If not yet in DB, allow triggering directly with the handle URL
+        clubs = [{ handle: targetHandle, name: targetHandle, url: `https://www.instagram.com/${targetHandle}` }];
+      }
+    } else if (limit && limit > 0) {
+      clubs = clubs.slice(0, limit);
+    }
+
     const clubUrls = clubs
       .map((c) => c.url || `https://www.instagram.com/${c.handle}`)
       .filter(Boolean);
@@ -25,7 +42,8 @@ async function handleCronTrigger(req: NextRequest) {
     }
 
     const client = new BrightDataClient();
-    const batches = BrightDataClient.chunkArray(clubUrls, 20);
+    const batchSize = parseInt(process.env.SCRAPE_BATCH_SIZE || "20", 10);
+    const batches = BrightDataClient.chunkArray(clubUrls, batchSize);
 
     const host = req.headers.get("host") || "localhost:3000";
     const protocol = host.includes("localhost") ? "http" : "https";
