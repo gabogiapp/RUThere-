@@ -51,9 +51,6 @@ export const Header: React.FC = () => {
     selectedCampus,
     setSelectedCampus,
     events,
-    resetToSampleData,
-    loadDatabaseData,
-    isSampleData,
   } = useCalendar();
 
   const [campusDropdownOpen, setCampusDropdownOpen] = useState(false);
@@ -470,17 +467,6 @@ export const Header: React.FC = () => {
               </button>
             ))}
           </div>
-
-          {/* 5. Testing Helper: Load Sample Events */}
-          <button
-            type="button"
-            onClick={isSampleData ? loadDatabaseData : resetToSampleData}
-            title={isSampleData ? "Switch to Live DB (Empty if no records)" : "Load Sample Events for Testing"}
-            className="flex h-9 items-center rounded-xl bg-white/95 px-2.5 sm:px-3 text-[11px] font-semibold text-[#cc0033] ring-1 ring-black/10 shadow-xs hover:bg-white transition-all shrink-0 cursor-pointer"
-          >
-            {isSampleData ? "Live DB" : "Sample Data"}
-          </button>
-
         </div>
 
       </div>

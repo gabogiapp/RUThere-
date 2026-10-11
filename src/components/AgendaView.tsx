@@ -15,7 +15,6 @@ export const AgendaView: React.FC = () => {
   const {
     filteredEvents,
     setSelectedEvent,
-    resetToSampleData,
   } = useCalendar();
 
   // Sort events chronologically by parsedDate, then all-day first, then startMinutes
@@ -64,13 +63,6 @@ export const AgendaView: React.FC = () => {
             <p className="text-[13px] text-[var(--text-muted)] mt-1">
               Database currently has no event records, or no events match current filters.
             </p>
-            <button
-              type="button"
-              onClick={resetToSampleData}
-              className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-[#cc0033] px-3.5 py-1.5 text-[12px] font-semibold text-white hover:bg-[#b3002d] transition-all shadow-xs cursor-pointer"
-            >
-              Load Sample Data for Testing
-            </button>
           </div>
         ) : (
           <div className="space-y-8">

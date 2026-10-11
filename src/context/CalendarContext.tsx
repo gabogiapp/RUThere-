@@ -6,7 +6,6 @@ import {
   RutgersCampus,
 } from '../types/event';
 import { enrichEvent } from '../utils/dateUtils';
-import { SAMPLE_BACKEND_EVENTS } from '../data/sampleEvents';
 
 interface CalendarContextType {
   events: CalendarEvent[];
@@ -25,17 +24,14 @@ interface CalendarContextType {
   setSelectedCampus: (campus: RutgersCampus | 'All') => void;
   selectedEvent: CalendarEvent | null;
   setSelectedEvent: (event: CalendarEvent | null) => void;
-  resetToSampleData: () => void;
   loadDatabaseData: () => Promise<void>;
-  isSampleData: boolean;
 }
 
 const CalendarContext = createContext<CalendarContextType | null>(null);
 
 export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Grabs from database; empty if no database/records exist
+  // Grabs from live database via API; empty if no records exist
   const [events, setEvents] = useState<CalendarEvent[]>([]);
-  const [isSampleData, setIsSampleData] = useState<boolean>(false);
 
   // Current view date
   const [currentDate, setCurrentDate] = useState<Date>(() => new Date());
@@ -47,7 +43,7 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [selectedCampus, setSelectedCampus] = useState<RutgersCampus | 'All'>('All');
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
 
-  // Load events from database via API
+  // Load events from live database via API
   const loadDatabaseData = async () => {
     try {
       const res = await fetch('/api/events');
@@ -56,7 +52,6 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if (data.events && Array.isArray(data.events) && data.events.length > 0) {
           const enriched = data.events.map((item: any, idx: number) => enrichEvent(item, idx));
           setEvents(enriched);
-          setIsSampleData(false);
           return;
         }
       }
@@ -65,24 +60,15 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
     // If it does not exist it should just be empty
     setEvents([]);
-    setIsSampleData(false);
   };
 
   useEffect(() => {
     loadDatabaseData();
   }, []);
 
-  // For testing purposes: switch to sample backend data fixture
-  const resetToSampleData = () => {
-    const enriched = SAMPLE_BACKEND_EVENTS.map((item, idx) => enrichEvent(item, idx));
-    setEvents(enriched);
-    setIsSampleData(true);
-    setCurrentDate(new Date(2026, 9, 12));
-  };
-
   // Date Navigation
   const goToToday = () => {
-    setCurrentDate(isSampleData ? new Date(2026, 9, 12) : new Date());
+    setCurrentDate(new Date());
   };
 
   const navigateDate = (direction: 'prev' | 'next') => {
@@ -153,9 +139,7 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setSelectedCampus,
         selectedEvent,
         setSelectedEvent,
-        resetToSampleData,
         loadDatabaseData,
-        isSampleData,
       }}
     >
       {children}
