@@ -18,10 +18,13 @@ export const AgendaView: React.FC = () => {
     resetToSampleData,
   } = useCalendar();
 
-  // Sort events chronologically by parsedDate then startMinutes
+  // Sort events chronologically by parsedDate, then all-day first, then startMinutes
   const sortedEvents = [...filteredEvents].sort((a, b) => {
     if (a.parsedDate !== b.parsedDate) {
       return a.parsedDate.localeCompare(b.parsedDate);
+    }
+    if (a.is_all_day !== b.is_all_day) {
+      return a.is_all_day ? -1 : 1;
     }
     return a.startMinutes - b.startMinutes;
   });
@@ -74,13 +77,17 @@ export const AgendaView: React.FC = () => {
             {Object.entries(groupedEvents).map(([dateLabel, events]) => (
               <div key={dateLabel} className="space-y-3">
                 
-                {/* Date header */}
-                <div className="sticky top-0 z-10 flex items-center gap-2 bg-[var(--bg-primary)]/90 backdrop-blur-md py-1">
-                  <span className="flex size-2 rounded-full bg-[#cc0033]" />
-                  <h3 className="text-[14px] font-bold uppercase tracking-wider text-[var(--text-primary)]">
-                    {dateLabel}
-                  </h3>
-                  <div className="h-px flex-1 bg-[var(--border-color)]" />
+                {/* Sticky Date header with clean border & elevation shadow */}
+                <div className="sticky top-2 z-20 flex items-center justify-between rounded-xl border border-black/10 bg-white/95 px-4 py-2.5 shadow-sm backdrop-blur-md transition-all">
+                  <div className="flex items-center gap-2.5">
+                    <span className="flex size-2.5 rounded-full bg-[#cc0033] shadow-xs" />
+                    <h3 className="text-[13px] font-bold uppercase tracking-wider text-[#141414]">
+                      {dateLabel}
+                    </h3>
+                  </div>
+                  <span className="rounded-full bg-black/5 px-2.5 py-0.5 font-mono text-[11px] font-semibold text-gray-500">
+                    {events.length} {events.length === 1 ? 'event' : 'events'}
+                  </span>
                 </div>
 
                 {/* Event Cards */}
