@@ -9,7 +9,9 @@
     "scrape": "node scripts/scrape.js",
     "db:setup": "node scripts/setup-db.js",
     "db:populate-real": "node scripts/populate-real-neon-data.js",
-    "db:import-clubs": "node scripts/import-clubs.js"
+    "db:import-clubs": "node scripts/import-clubs.js",
+    "cron:run": "node scripts/run-cron.js",
+    "cron:run-10": "node scripts/run-cron.js --max-posts=10"
   },
   "dependencies": {
     "@neon/config": "^1.8.6",
