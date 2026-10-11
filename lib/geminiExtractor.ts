@@ -34,6 +34,17 @@ export interface PoolKeyEntry {
   timestamps: number[];
 }
 
+export function isGeminiPacerEnabled(): boolean {
+  const envVal = (
+    process.env.GEMINI_PACER ??
+    process.env.GEMINI_PACER_ENABLED ??
+    process.env.ENABLE_GEMINI_PACER ??
+    "true"
+  ).trim().toLowerCase();
+
+  return envVal !== "false" && envVal !== "off" && envVal !== "0" && envVal !== "no" && envVal !== "disabled";
+}
+
 /**
  * Multi-Key Pool with Strict Per-Key Rate Limiting & 429 Isolation.
  * Automatically loads keys from:
@@ -98,21 +109,30 @@ export class GeminiKeyPool {
     }
   }
 
+  public get isPacerEnabled(): boolean {
+    return isGeminiPacerEnabled();
+  }
+
   public get maxRpmPerKey(): number {
     const envVal = parseInt(process.env.GEMINI_RPM || "12", 10);
-    return isNaN(envVal) || envVal <= 0 ? 12 : Math.min(envVal, 12);
+    return isNaN(envVal) || envVal <= 0 ? 12 : envVal;
   }
 
   public get minSpacingPerKey(): number {
-    return Math.ceil(60000 / this.maxRpmPerKey) + 200; // ~5,200ms strictly between requests to the SAME key
+    if (!this.isPacerEnabled) return 0;
+    const rpm = this.maxRpmPerKey;
+    const buffer = rpm > 50 ? 0 : 200;
+    return Math.ceil(60000 / rpm) + buffer;
   }
 
   /**
    * Acquires the next available key, strictly guaranteeing that:
-   * 1. The key has waited at least minSpacingPerKey (~4.7s) since its last request
-   * 2. The key has made fewer than maxRpmPerKey (13) requests in the rolling 60s window
-   * 3. The key is not in a cooldown state (from 429 backoff)
-   * If no key is immediately ready, safely pauses execution until an active key becomes ready.
+   * 1. If GEMINI_PACER is enabled (default for free tier):
+   *    - The key has waited at least minSpacingPerKey since its last request
+   *    - The key has made fewer than maxRpmPerKey requests in the rolling 60s window
+   * 2. If GEMINI_PACER is disabled (e.g. GEMINI_PACER=false or off for paid tier):
+   *    - Immediately returns the next active key with 0ms artificial delay
+   * 3. Honors cooldowns if a key hits HTTP 429/401/403
    */
   public async acquireKey(): Promise<PoolKeyEntry> {
     if (this.keys.length === 0) {
@@ -120,6 +140,32 @@ export class GeminiKeyPool {
       if (this.keys.length === 0) {
         throw new Error("No valid Gemini API keys configured");
       }
+    }
+
+    const now = Date.now();
+
+    // Fast-path: When pacer is disabled (GEMINI_PACER=false or off),
+    // immediately rotate to the next active key without sleeping or artificial throttling.
+    if (!this.isPacerEnabled) {
+      for (let i = 0; i < this.keys.length; i++) {
+        const idx = (this.currentIndex + i) % this.keys.length;
+        const candidate = this.keys[idx];
+        if (candidate.cooldownUntil <= now) {
+          candidate.lastRequestTime = now;
+          candidate.timestamps.push(now);
+          this.currentIndex = (idx + 1) % this.keys.length;
+          return candidate;
+        }
+      }
+
+      // If all keys are currently in cooldown from errors, wait for the shortest cooldown
+      const waitTimes = this.keys.map((k) => Math.max(0, k.cooldownUntil - now)).filter((w) => w > 0);
+      const shortestCooldown = waitTimes.length > 0 ? Math.min(...waitTimes) : 0;
+      if (shortestCooldown > 0 && shortestCooldown <= 60000) {
+        await new Promise((r) => setTimeout(r, Math.min(shortestCooldown, 5000)));
+        return this.acquireKey();
+      }
+      return this.keys[this.currentIndex];
     }
 
     const minSpacing = this.minSpacingPerKey;
