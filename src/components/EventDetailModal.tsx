@@ -184,7 +184,7 @@ export const EventDetailModal: React.FC = () => {
       >
         {/* Left Side: Media Column (Image or Playable Video) */}
         {hasMedia && (
-          <div className="w-full md:w-[44%] lg:w-[42%] bg-black/95 dark:bg-black flex flex-col items-center justify-center p-3 sm:p-4 relative shrink-0 border-b md:border-b-0 md:border-r border-[var(--border-subtle)] overflow-hidden max-h-[38vh] md:max-h-[85vh]">
+          <div className="w-full md:w-[44%] lg:w-[42%] bg-black/95 flex flex-col items-center justify-center p-3 sm:p-4 relative shrink-0 border-b md:border-b-0 md:border-r border-[var(--border-subtle)] overflow-hidden max-h-[38vh] md:max-h-[85vh]">
             {/* View switcher & download toggle */}
             <div className="absolute top-2.5 right-2.5 z-20 flex items-center gap-1.5">
               {hasPlayableVideo && (

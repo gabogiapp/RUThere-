@@ -171,7 +171,7 @@ export const Header: React.FC = () => {
             </button>
 
             {campusDropdownOpen && (
-              <div className="absolute left-0 sm:right-0 sm:left-auto top-11 z-50 w-52 rounded-xl border border-[var(--border-color)] bg-white p-1.5 shadow-xl animate-fade-in text-[12px]">
+              <div className="absolute left-0 sm:right-0 sm:left-auto top-11 z-50 w-52 rounded-xl border border-[var(--border-color)] bg-white text-[var(--text-primary)] p-1.5 shadow-xl animate-fade-in text-[12px]">
                 <div className="flex items-center justify-between px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-gray-400">
                   <span>Select Campus</span>
                   {selectedCampus !== 'All' && (
@@ -265,7 +265,7 @@ export const Header: React.FC = () => {
             </button>
 
             {categoryDropdownOpen && (
-              <div className="absolute right-0 top-11 z-50 w-56 rounded-xl border border-[var(--border-color)] bg-white p-1.5 shadow-xl animate-fade-in text-[12px]">
+              <div className="absolute right-0 top-11 z-50 w-56 rounded-xl border border-[var(--border-color)] bg-white text-[var(--text-primary)] p-1.5 shadow-xl animate-fade-in text-[12px]">
                 <div className="flex items-center justify-between px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-gray-400">
                   <span>Club Categories</span>
                   {selectedCategory !== 'All' && (
@@ -381,9 +381,9 @@ export const Header: React.FC = () => {
 
               {/* Small Month Calendar Popover */}
               {calendarPopoverOpen && (
-                <div className="absolute right-0 top-11 z-50 w-72 rounded-2xl border border-[var(--border-color)] bg-white p-3.5 shadow-2xl animate-fade-in text-[12px]">
+                <div className="absolute right-0 top-11 z-50 w-72 rounded-2xl border border-[var(--border-color)] bg-white text-[var(--text-primary)] p-3.5 shadow-2xl animate-fade-in text-[12px]">
                   {/* Popover Header */}
-                  <div className="flex items-center justify-between pb-2 border-b border-gray-100 mb-2">
+                  <div className="flex items-center justify-between pb-2 border-b border-[var(--border-subtle)] mb-2">
                     <span className="text-[13px] font-bold text-[#141414]">
                       {formattedMonthYear}
                     </span>

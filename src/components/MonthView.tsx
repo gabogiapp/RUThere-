@@ -229,7 +229,7 @@ export const MonthView: React.FC = () => {
                           </span>
                         )}
                         {!event.video_url && event.image_url && (
-                          <span className="flex items-center gap-1 rounded bg-black/5 dark:bg-white/10 border border-[var(--border-subtle)] text-[var(--text-secondary)] px-1.5 py-0.5 text-[10px] font-medium">
+                          <span className="flex items-center gap-1 rounded bg-black/5 border border-[var(--border-subtle)] text-[var(--text-secondary)] px-1.5 py-0.5 text-[10px] font-medium">
                             <ImageIcon size={10} />
                             <span>Flyer</span>
                           </span>
