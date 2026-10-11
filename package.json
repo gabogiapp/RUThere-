@@ -13,7 +13,9 @@
     "cron:run": "node scripts/run-cron.js",
     "cron:run-10": "node scripts/run-cron.js --max-posts=10",
     "cron:force-10": "node scripts/run-cron.js --max-posts=10 --force",
-    "cron:resume-10": "node scripts/run-cron.js --max-posts=10 --force --resume-from=10"
+    "cron:resume-10": "node scripts/run-cron.js --max-posts=10 --force --resume-from=10",
+    "cron:resume-13": "node scripts/run-cron.js --max-posts=10 --force --resume-from=13",
+    "cron:resume-14": "node scripts/run-cron.js --max-posts=10 --force --resume-from=14"
   },
   "dependencies": {
     "@neon/config": "^1.8.6",
