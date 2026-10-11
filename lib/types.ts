@@ -39,6 +39,7 @@ export interface ClubRecord {
   posts_count?: number;
   interests?: string[];
   related_interests?: string[];
+  last_scraped_at?: string | Date;
 }
 
 export interface EventRecord {

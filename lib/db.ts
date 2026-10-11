@@ -69,7 +69,7 @@ export async function getClubs(): Promise<ClubRecord[]> {
 
   try {
     const res = await db.query(
-      "SELECT id, handle, name, category, url, biography, followers, following, posts_count, interests, related_interests FROM clubs ORDER BY name ASC"
+      "SELECT id, handle, name, category, url, biography, followers, following, posts_count, interests, related_interests, last_scraped_at FROM clubs ORDER BY name ASC"
     );
     return res.rows;
   } catch (err) {
@@ -363,14 +363,7 @@ export async function processAndStoreBrightData(
     });
     clubsUpdated++;
 
-    // Update last_scraped_at timestamp for this club
-    if (db && club && club.id) {
-      try {
-        await db.query("UPDATE clubs SET last_scraped_at = NOW() WHERE id = $1", [club.id]);
-      } catch (e) {
-        console.warn(`Could not update last_scraped_at for club ${handle}:`, e);
-      }
-    }
+    const isNewClub = !club.last_scraped_at;
 
     const posts = rec.posts || [];
     // Include posts with captions, flyer images, or videos
@@ -388,7 +381,14 @@ export async function processAndStoreBrightData(
       return postTime >= currentSemester.start.getTime();
     });
 
-    // Pipeline Optimization 2: Top N Posts Limit (Default: Top 2 posts per handle)
+    // Pipeline Optimization 2: Dynamic Posts Limit
+    // - Brand-new clubs (never scraped before / initial backfill): up to 10 posts (NEW_CLUB_MAX_POSTS, default: 10)
+    // - Existing clubs (routine scheduled cron maintenance): up to 2 posts (MAX_POSTS_PER_CLUB, default: 2)
+    // - Explicit option / query override (options.maxPostsPerClub) always takes precedence if specified
+    const defaultLimit = isNewClub
+      ? parseInt(process.env.NEW_CLUB_MAX_POSTS || "10", 10)
+      : parseInt(process.env.MAX_POSTS_PER_CLUB || "2", 10);
+
     const envVal = process.env.MAX_POSTS_PER_CLUB?.trim().toLowerCase();
     const isUnlimited = envVal === "all" || envVal === "0" || envVal === "unlimited";
     const maxPostsPerClub =
@@ -396,7 +396,7 @@ export async function processAndStoreBrightData(
         ? options.maxPostsPerClub
         : isUnlimited
         ? Infinity
-        : parseInt(process.env.MAX_POSTS_PER_CLUB || "2", 10);
+        : defaultLimit;
 
     const targetPosts =
       isFinite(maxPostsPerClub) && maxPostsPerClub > 0
@@ -560,6 +560,15 @@ export async function processAndStoreBrightData(
           await upsertEvent(newEvent);
           newEvents.push(newEvent);
         }
+      }
+    }
+
+    // Stamp last_scraped_at timestamp for this club so subsequent crons run in routine maintenance mode (2 posts)
+    if (db && club && club.id) {
+      try {
+        await db.query("UPDATE clubs SET last_scraped_at = NOW() WHERE id = $1", [club.id]);
+      } catch (e) {
+        console.warn(`Could not update last_scraped_at for club ${handle}:`, e);
       }
     }
   }
