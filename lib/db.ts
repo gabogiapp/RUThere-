@@ -148,36 +148,110 @@ export async function upsertClub(club: Partial<ClubRecord>): Promise<ClubRecord>
   }
 }
 
-export async function getEvents(): Promise<EventRecord[]> {
+/**
+ * Returns the start and end boundary Date objects for the academic semester.
+ * - Fall Semester: August 15 -> December 31
+ * - Spring Semester: January 1 -> May 31
+ * - Summer Session: June 1 -> August 14
+ */
+export function getCurrentSemesterRange(referenceDate: Date = new Date()): {
+  name: string;
+  start: Date;
+  end: Date;
+} {
+  const year = referenceDate.getFullYear();
+  const month = referenceDate.getMonth(); // 0 = Jan, 7 = Aug, 8 = Sep, 11 = Dec
+  const day = referenceDate.getDate();
+
+  // Fall semester starts with campus move-in / Welcome Week (~mid August) through Dec 31
+  if (month >= 8 || (month === 7 && day >= 15)) {
+    return {
+      name: `Fall ${year}`,
+      start: new Date(year, 7, 15, 0, 0, 0, 0), // August 15
+      end: new Date(year, 11, 31, 23, 59, 59, 999), // December 31
+    };
+  } else if (month <= 4) {
+    // Spring semester: January 1 to May 31
+    return {
+      name: `Spring ${year}`,
+      start: new Date(year, 0, 1, 0, 0, 0, 0), // January 1
+      end: new Date(year, 4, 31, 23, 59, 59, 999), // May 31
+    };
+  } else {
+    // Summer session: June 1 to August 14
+    return {
+      name: `Summer ${year}`,
+      start: new Date(year, 5, 1, 0, 0, 0, 0), // June 1
+      end: new Date(year, 7, 14, 23, 59, 59, 999), // August 14
+    };
+  }
+}
+
+export async function getEvents(options: { currentSemesterOnly?: boolean } = { currentSemesterOnly: true }): Promise<EventRecord[]> {
   const db = getPool();
+  const semester = getCurrentSemesterRange();
+  const filterSemester = options.currentSemesterOnly !== false;
+
   if (!db) {
     const store = loadLocalStore();
-    return store.events;
+    if (!filterSemester) return store.events;
+    return store.events.filter((e) => {
+      if (!e.event_time) return true;
+      const t = new Date(e.event_time).getTime();
+      return isNaN(t) || t >= semester.start.getTime();
+    });
   }
 
   try {
-    const res = await db.query(`
-      SELECT 
-        e.id,
-        e.club_id,
-        c.handle as club_handle,
-        c.name as club_name,
-        c.category as club_category,
-        e.instagram_post_id,
-        e.post_url,
-        e.title,
-        e.event_time,
-        e.location,
-        e.campus,
-        e.category,
-        e.image_url,
-        e.flyer_details,
-        e.description,
-        e.created_at
-      FROM events e
-      LEFT JOIN clubs c ON e.club_id = c.id
-      ORDER BY e.event_time ASC
-    `);
+    const query = filterSemester
+      ? `
+        SELECT 
+          e.id,
+          e.club_id,
+          c.handle as club_handle,
+          c.name as club_name,
+          c.category as club_category,
+          e.instagram_post_id,
+          e.post_url,
+          e.title,
+          e.event_time,
+          e.location,
+          e.campus,
+          e.category,
+          e.image_url,
+          e.flyer_details,
+          e.description,
+          e.created_at
+        FROM events e
+        LEFT JOIN clubs c ON e.club_id = c.id
+        WHERE (e.event_time >= $1) OR (e.event_time IS NULL AND e.created_at >= $1)
+        ORDER BY e.event_time ASC
+      `
+      : `
+        SELECT 
+          e.id,
+          e.club_id,
+          c.handle as club_handle,
+          c.name as club_name,
+          c.category as club_category,
+          e.instagram_post_id,
+          e.post_url,
+          e.title,
+          e.event_time,
+          e.location,
+          e.campus,
+          e.category,
+          e.image_url,
+          e.flyer_details,
+          e.description,
+          e.created_at
+        FROM events e
+        LEFT JOIN clubs c ON e.club_id = c.id
+        ORDER BY e.event_time ASC
+      `;
+
+    const params = filterSemester ? [semester.start.toISOString()] : [];
+    const res = await db.query(query, params);
 
     return res.rows.map((row) => ({
       id: row.id,
@@ -203,7 +277,12 @@ export async function getEvents(): Promise<EventRecord[]> {
   } catch (err) {
     console.warn("Failed to query events from Postgres, returning local store:", err);
     const store = loadLocalStore();
-    return store.events;
+    if (!filterSemester) return store.events;
+    return store.events.filter((e) => {
+      if (!e.event_time) return true;
+      const t = new Date(e.event_time).getTime();
+      return isNaN(t) || t >= semester.start.getTime();
+    });
   }
 }
 
@@ -243,34 +322,86 @@ export async function processAndStoreBrightData(
     });
     clubsUpdated++;
 
+    // Update last_scraped_at timestamp for this club
+    if (db && club && club.id) {
+      try {
+        await db.query("UPDATE clubs SET last_scraped_at = NOW() WHERE id = $1", [club.id]);
+      } catch (e) {
+        console.warn(`Could not update last_scraped_at for club ${handle}:`, e);
+      }
+    }
+
     const posts = rec.posts || [];
     // Include posts with captions, flyer images, or videos
-    const postsWithContent = posts.filter((p) => (p.caption && p.caption.trim()) || p.image_url || p.video_url || p.video_play_url);
-    const targetPosts = postsWithContent.slice(0, 8);
+    const postsWithContent = posts.filter(
+      (p) => (p.caption && p.caption.trim()) || p.image_url || p.video_url || p.video_play_url
+    );
+
+    // Pipeline Optimization 1: Current Semester Recency Gate
+    // Discards posts published before the start of the current academic semester
+    const currentSemester = getCurrentSemesterRange();
+    const freshPosts = postsWithContent.filter((p) => {
+      if (!p.datetime) return true; // keep if unknown date
+      const postTime = new Date(p.datetime).getTime();
+      if (isNaN(postTime)) return true;
+      return postTime >= currentSemester.start.getTime();
+    });
+
+    // Pipeline Optimization 2: Top N Posts Limit (Default: Top 2 posts per handle)
+    const maxPostsPerClub = parseInt(process.env.MAX_POSTS_PER_CLUB || "2", 10);
+    const targetPosts = freshPosts.slice(0, maxPostsPerClub);
 
     if (targetPosts.length > 0) {
-      const batchInput = targetPosts.map((p, idx) => {
+      // Pipeline Optimization 3: Pre-Check Existing Posts in Neon to Avoid Redundant AI/Gemini Calls
+      let alreadySavedPostIds = new Set<string>();
+      if (db && club && club.id) {
+        try {
+          const postIdsToCheck = targetPosts.map((p, idx) => String(p.id || p.url || `post_${idx}`));
+          const existingRes = await db.query(
+            "SELECT instagram_post_id FROM events WHERE instagram_post_id = ANY($1)",
+            [postIdsToCheck]
+          );
+          alreadySavedPostIds = new Set(existingRes.rows.map((r: any) => r.instagram_post_id));
+        } catch (err) {
+          console.warn("Could not pre-check existing posts in DB:", err);
+        }
+      }
+
+      // Filter down to only posts that actually require Gemini AI extraction
+      const postsNeedingExtraction = targetPosts.filter((p, idx) => {
         const rawId = String(p.id || p.url || `post_${idx}`);
-        const postUrl =
-          p.url ||
-          (p.id && !p.id.startsWith("http")
-            ? `https://www.instagram.com/p/${p.id}`
-            : `https://www.instagram.com/${handle}`);
-        const videoUrl = p.video_url || p.video_play_url || undefined;
-        return {
-          post_id: rawId,
-          caption: p.caption || "",
-          image_url: p.image_url,
-          video_url: videoUrl,
-          post_url: postUrl,
-          club_name: club.name,
-          club_handle: `@${handle}`,
-          club_category: club.category,
-        };
+        return !alreadySavedPostIds.has(rawId);
       });
 
-      // Extract events via Gemini Multimodal Vision API adhering to example.json
-      const geminiResults = await extractEventsBatchWithGemini(batchInput);
+      let geminiResults = new Map<string, any>();
+      if (postsNeedingExtraction.length > 0) {
+        console.log(
+          `[/api/webhooks/brightdata] Extracting ${postsNeedingExtraction.length} new post(s) for ${handle} via Gemini Vision...`
+        );
+        const batchInput = postsNeedingExtraction.map((p, idx) => {
+          const rawId = String(p.id || p.url || `post_${idx}`);
+          const postUrl =
+            p.url ||
+            (p.id && !p.id.startsWith("http")
+              ? `https://www.instagram.com/p/${p.id}`
+              : `https://www.instagram.com/${handle}`);
+          const videoUrl = p.video_url || p.video_play_url || undefined;
+          return {
+            post_id: rawId,
+            caption: p.caption || "",
+            image_url: p.image_url,
+            video_url: videoUrl,
+            post_url: postUrl,
+            club_name: club.name,
+            club_handle: `@${handle}`,
+            club_category: club.category,
+          };
+        });
+
+        geminiResults = await extractEventsBatchWithGemini(batchInput);
+      } else {
+        console.log(`[/api/webhooks/brightdata] All top ${targetPosts.length} posts for ${handle} are already in DB; skipping AI calls.`);
+      }
 
       for (let idx = 0; idx < targetPosts.length; idx++) {
         const post = targetPosts[idx];
@@ -322,19 +453,28 @@ export async function processAndStoreBrightData(
             extraction_source: extracted.extraction_source,
           };
 
-          // If connected to Neon Postgres, also persist directly
+          // If connected to Neon Postgres, persist complete multimodal attributes
           if (db && club && club.id) {
             try {
               await db.query(
-                `INSERT INTO events (club_id, instagram_post_id, post_url, title, event_time, location, description)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7)
-                 ON CONFLICT (instagram_post_id) DO UPDATE SET
-                   club_id = EXCLUDED.club_id,
-                   post_url = EXCLUDED.post_url,
-                   title = EXCLUDED.title,
-                   event_time = COALESCE(EXCLUDED.event_time, events.event_time),
-                   location = COALESCE(EXCLUDED.location, events.location),
-                   description = EXCLUDED.description`,
+                `INSERT INTO events (
+                  club_id, instagram_post_id, post_url, title, event_time, location,
+                  description, campus, category, image_url, video_url, flyer_details, extraction_source
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                ON CONFLICT (instagram_post_id) DO UPDATE SET
+                  club_id = EXCLUDED.club_id,
+                  post_url = EXCLUDED.post_url,
+                  title = EXCLUDED.title,
+                  event_time = COALESCE(EXCLUDED.event_time, events.event_time),
+                  location = COALESCE(EXCLUDED.location, events.location),
+                  description = EXCLUDED.description,
+                  campus = COALESCE(EXCLUDED.campus, events.campus),
+                  category = COALESCE(EXCLUDED.category, events.category),
+                  image_url = COALESCE(EXCLUDED.image_url, events.image_url),
+                  video_url = COALESCE(EXCLUDED.video_url, events.video_url),
+                  flyer_details = COALESCE(EXCLUDED.flyer_details, events.flyer_details),
+                  extraction_source = COALESCE(EXCLUDED.extraction_source, events.extraction_source)`,
                 [
                   club.id,
                   postId,
@@ -343,6 +483,12 @@ export async function processAndStoreBrightData(
                   eventTimeStr,
                   extracted.location,
                   post.caption || "",
+                  extracted.campus || "College Ave",
+                  extracted.category || club.category || "Social & Student Life",
+                  post.image_url || extracted.image_url || null,
+                  videoUrl || null,
+                  extracted.flyer_details || null,
+                  extracted.extraction_source || "gemini_multimodal",
                 ]
               );
             } catch (err) {

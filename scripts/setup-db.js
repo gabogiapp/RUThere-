@@ -28,6 +28,7 @@ async function setup() {
           followers INTEGER,
           following INTEGER,
           posts_count INTEGER,
+          last_scraped_at TIMESTAMP WITH TIME ZONE,
           created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       );
 
@@ -39,11 +40,27 @@ async function setup() {
           title VARCHAR(255) NOT NULL,
           event_time TIMESTAMP WITH TIME ZONE,
           location VARCHAR(255),
+          campus VARCHAR(100),
+          category VARCHAR(100),
+          image_url TEXT,
+          video_url TEXT,
+          flyer_details TEXT,
+          extraction_source VARCHAR(50),
           description TEXT,
           created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       );
 
+      -- Add columns if existing table didn't have them
+      ALTER TABLE clubs ADD COLUMN IF NOT EXISTS last_scraped_at TIMESTAMP WITH TIME ZONE;
+      ALTER TABLE events ADD COLUMN IF NOT EXISTS campus VARCHAR(100);
+      ALTER TABLE events ADD COLUMN IF NOT EXISTS category VARCHAR(100);
+      ALTER TABLE events ADD COLUMN IF NOT EXISTS image_url TEXT;
+      ALTER TABLE events ADD COLUMN IF NOT EXISTS video_url TEXT;
+      ALTER TABLE events ADD COLUMN IF NOT EXISTS flyer_details TEXT;
+      ALTER TABLE events ADD COLUMN IF NOT EXISTS extraction_source VARCHAR(50);
+
       CREATE INDEX IF NOT EXISTS idx_events_time ON events(event_time);
+      CREATE INDEX IF NOT EXISTS idx_events_club_id ON events(club_id);
     `);
     console.log("✓ Tables and indexes created successfully.");
 
