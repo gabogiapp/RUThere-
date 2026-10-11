@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "db:setup": "node scripts/setup-db.js"
+    "db:setup": "node scripts/setup-db.js",
+    "db:populate-real": "node scripts/populate-real-neon-data.js"
   },
   "dependencies": {
     "@neon/config": "^1.8.6",

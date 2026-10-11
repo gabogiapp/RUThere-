@@ -12,6 +12,8 @@ dist/
 *.tsbuildinfo
 .data/
 scraped_results.json
+real_*.json
+test.py
 
 # Python
 __pycache__/
