@@ -3,18 +3,12 @@
 /**
  * Bulk Club Importer & Interest Tagger
  *
- * Imports clubs from a JSON, CSV, or plain text file into Neon PostgreSQL.
+ * Imports clubs from a JSON, CSV, or text file (e.g. message.txt) into Neon PostgreSQL.
  * Automatically generates two-tier taxonomy tags (interests + related_interests)
- * and assigns club categories via Gemini AI (with heuristic fallback).
+ * and assigns club categories using batch Gemini AI (with heuristic fallback).
  *
  * Usage:
- *   node scripts/import-clubs.js <file_path> [--concurrency=5] [--scrape]
- *
- * Supported file formats:
- *   - Plain text (.txt): One handle per line (e.g. @rutgers_usacs or rutgers_usacs)
- *   - JSON (.json): Array of strings (["handle1", "handle2"]) or array of objects:
- *     [{"handle": "rutgers_ai", "name": "Rutgers AI", "category": "Tech & Coding"}]
- *   - CSV (.csv): Headers like `handle,name,category`
+ *   node scripts/import-clubs.js <file_path> [--batch-size=20] [--scrape]
  */
 
 const fs = require("fs");
@@ -38,65 +32,74 @@ function inferHeuristics(name, handle) {
   const related = new Set();
   let category = "Social & Student Life";
 
-  if (text.includes("ai") || text.includes("artificial intelligence")) {
+  if (text.includes("ai") || text.includes("artificial intelligence") || text.includes("machine learning")) {
     category = "Tech & Coding";
-    ["artificial intelligence", "machine learning", "deep learning"].forEach((t) => primary.add(t));
-    ["computer science", "data science", "robotics"].forEach((t) => related.add(t));
-  } else if (text.includes("cs") || text.includes("code") || text.includes("comp") || text.includes("hack") || text.includes("tech")) {
+    ["artificial intelligence", "machine learning", "deep learning", "neural networks"].forEach((t) => primary.add(t));
+    ["computer science", "data science", "robotics", "algorithms"].forEach((t) => related.add(t));
+  } else if (text.includes("cs") || text.includes("code") || text.includes("comp") || text.includes("hack") || text.includes("tech") || text.includes("developer") || text.includes("software")) {
     category = "Tech & Coding";
-    ["coding", "computer science", "software engineering"].forEach((t) => primary.add(t));
-    ["hackathons", "artificial intelligence", "web dev", "tech"].forEach((t) => related.add(t));
-  } else if (text.includes("sport") || text.includes("rec") || text.includes("climb") || text.includes("game") || text.includes("esport") || text.includes("gym")) {
-    category = "Sports & Recreation";
-    ["athletics", "recreation", "fitness"].forEach((t) => primary.add(t));
-    ["wellness", "student life", "community"].forEach((t) => related.add(t));
-  } else if (text.includes("dance") || text.includes("art") || text.includes("music") || text.includes("theatre") || text.includes("photo")) {
+    ["coding", "computer science", "software engineering", "programming"].forEach((t) => primary.add(t));
+    ["hackathons", "artificial intelligence", "web dev", "technology"].forEach((t) => related.add(t));
+  } else if (text.includes("dance") || text.includes("art") || text.includes("music") || text.includes("theatre") || text.includes("photo") || text.includes("film") || text.includes("choir") || text.includes("band") || text.includes("acappella") || text.includes("radio") || text.includes("creative")) {
     category = "Arts & Culture";
-    ["arts", "creativity", "culture"].forEach((t) => primary.add(t));
-    ["campus life", "performance", "student events"].forEach((t) => related.add(t));
-  } else if (text.includes("biz") || text.includes("business") || text.includes("finance") || text.includes("consult") || text.includes("invest")) {
+    ["arts", "performance", "creativity", "entertainment"].forEach((t) => primary.add(t));
+    ["performing arts", "music", "cultural expression", "campus life"].forEach((t) => related.add(t));
+  } else if (text.includes("sport") || text.includes("rec") || text.includes("climb") || text.includes("game") || text.includes("esport") || text.includes("gym") || text.includes("fitness") || text.includes("athletic") || text.includes("martial") || text.includes("ski") || text.includes("valorant") || text.includes("billiards") || text.includes("poker")) {
+    category = "Sports & Recreation";
+    ["athletics", "recreation", "fitness", "team sports"].forEach((t) => primary.add(t));
+    ["wellness", "active living", "student recreation", "community"].forEach((t) => related.add(t));
+  } else if (text.includes("biz") || text.includes("business") || text.includes("finance") || text.includes("consult") || text.includes("invest") || text.includes("market") || text.includes("account") || text.includes("venture") || text.includes("actuarial")) {
     category = "Academic & Professional";
-    ["business", "networking", "career development"].forEach((t) => primary.add(t));
-    ["finance", "consulting", "professional development"].forEach((t) => related.add(t));
+    ["business", "networking", "career development", "professional leadership"].forEach((t) => primary.add(t));
+    ["finance", "consulting", "economics", "corporate careers"].forEach((t) => related.add(t));
+  } else if (text.includes("medic") || text.includes("health") || text.includes("cancer") || text.includes("neuro") || text.includes("bio") || text.includes("chem") || text.includes("clinic") || text.includes("dent") || text.includes("pharm")) {
+    category = "Academic & Professional";
+    ["pre-health", "medicine", "healthcare", "scientific research"].forEach((t) => primary.add(t));
+    ["biology", "public health", "clinical experience", "sciences"].forEach((t) => related.add(t));
+  } else if (text.includes("asian") || text.includes("black") || text.includes("latin") || text.includes("arab") || text.includes("indian") || text.includes("korean") || text.includes("chinese") || text.includes("filipino") || text.includes("jewish") || text.includes("muslim") || text.includes("christian") || text.includes("caribbean") || text.includes("african") || text.includes("cultural") || text.includes("fellowship")) {
+    category = "Cultural & Identity";
+    ["cultural heritage", "diversity", "community building", "identity"].forEach((t) => primary.add(t));
+    ["campus community", "traditions", "student alliance", "networking"].forEach((t) => related.add(t));
+  } else if (text.includes("service") || text.includes("volunteer") || text.includes("charity") || text.includes("relief") || text.includes("blood") || text.includes("advocacy") || text.includes("amnesty") || text.includes("unicef")) {
+    category = "Community Service";
+    ["volunteering", "community service", "philanthropy", "social impact"].forEach((t) => primary.add(t));
+    ["civic engagement", "humanitarian aid", "nonprofit outreach", "advocacy"].forEach((t) => related.add(t));
   } else {
-    ["student life", "community", "campus events"].forEach((t) => primary.add(t));
-    ["networking", "rutgers", "activities"].forEach((t) => related.add(t));
+    ["student life", "community", "campus involvement", "activities"].forEach((t) => primary.add(t));
+    ["networking", "rutgers university", "student leadership", "events"].forEach((t) => related.add(t));
   }
 
   return { category, primary: Array.from(primary), related: Array.from(related) };
 }
 
-// Call Gemini API for high-precision taxonomy classification
-async function tagClubWithGemini(club, apiKey) {
+// Call Gemini API in batches of 15-20 clubs for fast, high-accuracy taxonomy tagging
+async function tagClubBatchWithGemini(batch, apiKey) {
   if (!apiKey) {
-    return inferHeuristics(club.name, club.handle);
+    return batch.map((c) => ({
+      ...c,
+      ...inferHeuristics(c.name, c.handle),
+    }));
   }
 
   const prompt = `You are an expert taxonomy tagger for Rutgers University student clubs.
-Given this club, assign its category and generate two tiers of search interest tags:
-Category MUST be one of:
-- "Academic & Professional"
-- "Tech & Coding"
-- "Arts & Culture"
-- "Sports & Recreation"
-- "Social & Student Life"
-- "Cultural & Identity"
-- "Community Service"
+For each club in the list below, assign:
+- "category": MUST be one of ["Academic & Professional", "Tech & Coding", "Arts & Culture", "Sports & Recreation", "Social & Student Life", "Cultural & Identity", "Community Service"]
+- "primary": array of 4-8 specific interests/activities of the club
+- "related": array of 4-8 broader academic fields/parent domains
 
-Tiers:
-1. "primary": 4 to 8 core specific interests and direct activities of the club.
-2. "related": 4 to 8 broader academic fields, parent domains, or sub-disciplines related to this club.
+Input Clubs:
+${JSON.stringify(batch.map((c) => ({ handle: c.handle, name: c.name })), null, 2)}
 
-Club Name: ${club.name}
-Handle: @${club.handle}
-
-Respond ONLY with a valid JSON object in this exact shape:
-{
-  "category": "Tech & Coding",
-  "primary": ["topic 1", "topic 2"],
-  "related": ["related topic 1", "related topic 2"]
-}
-No markdown backticks.`;
+Respond ONLY with a valid JSON array of objects matching the input clubs order:
+[
+  {
+    "handle": "...",
+    "category": "...",
+    "primary": ["..."],
+    "related": ["..."]
+  }
+]
+No markdown formatting or backticks.`;
 
   try {
     const res = await fetch(
@@ -106,9 +109,12 @@ No markdown backticks.`;
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.2, maxOutputTokens: 300 },
+          generationConfig: {
+            temperature: 0.2,
+            responseMimeType: "application/json",
+          },
         }),
-        signal: AbortSignal.timeout(8000),
+        signal: AbortSignal.timeout(15000),
       }
     );
 
@@ -116,23 +122,41 @@ No markdown backticks.`;
       const data = await res.json();
       const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
       const cleanJson = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();
-      const parsed = JSON.parse(cleanJson);
-      if (parsed && Array.isArray(parsed.primary) && Array.isArray(parsed.related)) {
-        return {
-          category: parsed.category || "Social & Student Life",
-          primary: parsed.primary.map((s) => String(s).toLowerCase().trim()).filter(Boolean),
-          related: parsed.related.map((s) => String(s).toLowerCase().trim()).filter(Boolean),
-        };
+      const parsedArray = JSON.parse(cleanJson);
+
+      if (Array.isArray(parsedArray)) {
+        const resultMap = new Map();
+        for (const item of parsedArray) {
+          if (item && item.handle) {
+            resultMap.set(item.handle.toLowerCase(), item);
+          }
+        }
+
+        return batch.map((c) => {
+          const match = resultMap.get(c.handle.toLowerCase());
+          if (match && Array.isArray(match.primary) && Array.isArray(match.related)) {
+            return {
+              ...c,
+              category: c.category || match.category || "Social & Student Life",
+              primary: match.primary.map((s) => String(s).toLowerCase().trim()).filter(Boolean),
+              related: match.related.map((s) => String(s).toLowerCase().trim()).filter(Boolean),
+            };
+          }
+          return { ...c, ...inferHeuristics(c.name, c.handle) };
+        });
       }
     }
   } catch (err) {
-    // Fallback to heuristic
+    console.warn(`   [Gemini Batch Warning] Falling back to heuristics for batch: ${err.message}`);
   }
 
-  return inferHeuristics(club.name, club.handle);
+  return batch.map((c) => ({
+    ...c,
+    ...inferHeuristics(c.name, c.handle),
+  }));
 }
 
-// Parse input file (txt, json, csv)
+// Parse input file (handles message.txt format, txt, json, csv)
 function parseInputFile(filePath) {
   const content = fs.readFileSync(filePath, "utf-8").trim();
   const ext = path.extname(filePath).toLowerCase();
@@ -171,12 +195,55 @@ function parseInputFile(filePath) {
       clubs.push({ handle: cleanHandle, name, category });
     }
   } else {
-    // Plain text: one handle per line
+    // Text format: supports lines like "Academic Team @ruacademics" or one handle per line
     const lines = content.split(/\r?\n/).filter(Boolean);
-    for (const line of lines) {
-      const cleanHandle = line.replace(/^@/, "").replace(/https?:\/\/(www\.)?instagram\.com\//, "").replace(/\/+$/, "").trim().toLowerCase();
-      if (!cleanHandle) continue;
-      clubs.push({ handle: cleanHandle, name: formatClubNameFromHandle(cleanHandle) });
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line) continue;
+
+      // Handle specific known Rutgers anomalies in message.txt
+      if (/First Love Rutgers Fellowship/i.test(line)) {
+        clubs.push({ name: "First Love Rutgers Fellowship", handle: "firstloverutgers" });
+        continue;
+      }
+      if (/League of Legends/i.test(line) && line.endsWith("@")) {
+        clubs.push({ name: "League of Legends", handle: "rutgersleague" });
+        continue;
+      }
+      if (/Legwork for Lungs/i.test(line)) {
+        clubs.push({ name: "Legwork for Lungs", handle: "ru_legworkforlungs" });
+        continue;
+      }
+      if (/OrphanSporks/i.test(line)) {
+        clubs.push({ name: "OrphanSporks", handle: "rusporks" });
+        continue;
+      }
+
+      if (line.includes("@")) {
+        const parts = line.rsplit ? line.rsplit("@", 1) : [line.substring(0, line.lastIndexOf("@")), line.substring(line.lastIndexOf("@") + 1)];
+        const name = parts[0].trim();
+        let rawHandle = parts[1].trim().replace(/,/g, ".").replace(/\s+/g, "_").toLowerCase();
+        let cleanHandle = rawHandle.replace(/[^a-z0-9._]/g, "");
+
+        if (!cleanHandle) {
+          cleanHandle = (name || "club").toLowerCase().replace(/[^a-z0-9_]/g, "_").replace(/^_+|_+$/g, "");
+        }
+
+        clubs.push({
+          handle: cleanHandle,
+          name: name || formatClubNameFromHandle(cleanHandle),
+        });
+      } else {
+        // Line without @ (e.g. "Magic the Gathering NO INSTAGRAM")
+        const cleanName = line.replace(/\s*(NO\s+INSTA(GRAM)?|NO\s+CLUB)\s*$/i, "").trim();
+        let slug = cleanName.toLowerCase().replace(/[^a-z0-9_]/g, "_").replace(/^_+|_+$/g, "");
+        const handle = slug.startsWith("ru_") || slug.startsWith("rutgers") ? slug : `ru_${slug}`;
+
+        clubs.push({
+          handle,
+          name: cleanName,
+        });
+      }
     }
   }
 
@@ -189,21 +256,12 @@ function parseInputFile(filePath) {
   });
 }
 
-// Concurrency pool helper
-async function mapConcurrent(items, concurrency, fn) {
-  const results = [];
-  let index = 0;
-
-  async function worker() {
-    while (index < items.length) {
-      const currentIndex = index++;
-      results[currentIndex] = await fn(items[currentIndex], currentIndex);
-    }
+function chunkArray(arr, size) {
+  const chunks = [];
+  for (let i = 0; i < arr.length; i += size) {
+    chunks.push(arr.slice(i, i + size));
   }
-
-  const workers = Array.from({ length: Math.min(concurrency, items.length) }, () => worker());
-  await Promise.all(workers);
-  return results;
+  return chunks;
 }
 
 async function main() {
@@ -213,12 +271,11 @@ async function main() {
   if (!filePath) {
     console.log(`
 Usage:
-  node scripts/import-clubs.js <file_path> [--concurrency=10] [--scrape]
+  node scripts/import-clubs.js <file_path> [--batch-size=20] [--scrape]
 
 Examples:
-  node scripts/import-clubs.js handles.txt
-  node scripts/import-clubs.js clubs.json --concurrency=10
-  node scripts/import-clubs.js clubs.csv --scrape
+  node scripts/import-clubs.js message.txt
+  node scripts/import-clubs.js message.txt --scrape
 `);
     process.exit(1);
   }
@@ -229,14 +286,14 @@ Examples:
     process.exit(1);
   }
 
-  const concurrencyArg = args.find((a) => a.startsWith("--concurrency="));
-  const concurrency = concurrencyArg ? parseInt(concurrencyArg.split("=")[1], 10) : 10;
+  const batchSizeArg = args.find((a) => a.startsWith("--batch-size="));
+  const batchSize = batchSizeArg ? parseInt(batchSizeArg.split("=")[1], 10) : 20;
   const shouldScrape = args.includes("--scrape");
 
   const clubs = parseInputFile(resolvedPath);
   console.log(`\n========================================================`);
   console.log(`  Importing ${clubs.length} Clubs into Neon PostgreSQL  `);
-  console.log(`  Concurrency: ${concurrency} parallel requests         `);
+  console.log(`  Batch Size: ${batchSize} clubs per Gemini AI request `);
   console.log(`========================================================\n`);
 
   const connectionString = process.env.DATABASE_URL;
@@ -254,26 +311,30 @@ Examples:
   if (!apiKey) {
     console.warn("⚠️  GEMINI_API_KEY not found in .env. Using fast heuristic interest tagger.\n");
   } else {
-    console.log("🤖 Classifying club categories and two-tier interests using Gemini AI...\n");
+    console.log("🤖 Classifying club categories and two-tier interests with Gemini AI in batches...\n");
   }
 
   const startTime = Date.now();
-  let completed = 0;
+  const batches = chunkArray(clubs, batchSize);
+  const taggedClubs = [];
 
-  // Process and tag clubs concurrently
-  const taggedClubs = await mapConcurrent(clubs, concurrency, async (club, idx) => {
-    const taxonomy = await tagClubWithGemini(club, apiKey);
-    completed++;
+  let batchCount = 0;
+  for (const batch of batches) {
+    batchCount++;
+    const taggedBatch = await tagClubBatchWithGemini(batch, apiKey);
+    for (const c of taggedBatch) {
+      taggedClubs.push({
+        ...c,
+        interests: c.primary,
+        related_interests: c.related,
+        url: `https://www.instagram.com/${c.handle}`,
+      });
+    }
+
+    const completed = taggedClubs.length;
     const progress = Math.round((completed / clubs.length) * 100);
-    process.stdout.write(`   [${completed}/${clubs.length}] (${progress}%) Tagged @${club.handle} -> [${taxonomy.primary.slice(0, 3).join(", ")}]\r`);
-    return {
-      ...club,
-      category: club.category || taxonomy.category,
-      interests: taxonomy.primary,
-      related_interests: taxonomy.related,
-      url: `https://www.instagram.com/${club.handle}`,
-    };
-  });
+    process.stdout.write(`   Batch [${batchCount}/${batches.length}] (${progress}%) Processed ${completed}/${clubs.length} clubs\r`);
+  }
 
   console.log(`\n\n💾 Upserting ${taggedClubs.length} clubs into Neon PostgreSQL...`);
 
