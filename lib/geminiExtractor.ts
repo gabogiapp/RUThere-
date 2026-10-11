@@ -40,7 +40,13 @@ export class GeminiKeyPool {
       rawKeys.push(...process.env.GEMINI_API_KEY.split(/[\n,]/).map((k) => k.trim()).filter(Boolean));
     }
 
-    const unique = Array.from(new Set(rawKeys.filter(Boolean)));
+    const unique = Array.from(
+      new Set(
+        rawKeys
+          .filter(Boolean)
+          .filter((k) => k !== "[SENSITIVE]" && !k.startsWith("[") && k.length > 10)
+      )
+    );
     this.keys = unique.map((key, idx) => ({
       key,
       cooldownUntil: 0,
