@@ -1,0 +1,47 @@
+[
+  {
+    "account": "rutgers.usg",
+    "full_name": "Rutgers University Student Assembly",
+    "biography": "Official Student Government for Rutgers New Brunswick. Voice of the Student Body.  scarlet pride!",
+    "followers": 8920,
+    "following": 142,
+    "posts_count": 482,
+    "is_verified": true,
+    "url": "https://www.instagram.com/rutgers.usg",
+    "posts": [
+      {
+        "id": "post_usg_001",
+        "url": "https://www.instagram.com/p/DBaBcDeF1",
+        "caption": "📢 FIRST GENERAL BODY MEETING OF THE SEMESTER!\n\nJoin us for our Fall Kickoff GBM! Learn about upcoming legislation, student advocacy committees, and open executive board seats.\n\n📅 When: Thursday, Oct 25th\n⏰ Time: 7:30 PM - 9:00 PM\n📍 Location: Student Activities Center (SAC) Multipurpose Room\n\nFree pizza will be served! RSVP via link in bio: https://forms.gle/rutgersGBM2026",
+        "datetime": "2026-10-10T18:00:00.000Z",
+        "image_url": "https://images.unsplash.com/photo-1523580494863-6f3031224c94?w=800"
+      },
+      {
+        "id": "post_usg_002",
+        "url": "https://www.instagram.com/p/DBbBcDeF2",
+        "caption": "Happy Friday Scarlet Knights! Don't forget to register to vote before the deadline. Have a wonderful weekend!",
+        "datetime": "2026-10-09T14:00:00.000Z",
+        "image_url": "https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=800"
+      }
+    ]
+  },
+  {
+    "account": "ru_rudo",
+    "full_name": "Rutgers RUPA",
+    "biography": "Rutgers University Programming Association - Bringing campus life and premier events to Rutgers students!",
+    "followers": 23400,
+    "following": 88,
+    "posts_count": 1250,
+    "is_verified": true,
+    "url": "https://www.instagram.com/ru_rudo",
+    "posts": [
+      {
+        "id": "post_rupa_001",
+        "url": "https://www.instagram.com/p/DBcBcDeF3",
+        "caption": "🎬 OUTDOOR MOVIE NIGHT & TRIVIA!\n\nRUPA is bringing Spooky Movie Night to College Ave!\n\nDate: Friday, Oct 26\nTime: 8:00 PM - 11:00 PM\nWhere: College Ave Student Center - Morrell Street Yard\n\nBring your blankets and Rutgers student ID. Popcorn, hot cider, and prizes provided! Tickets at link in bio.",
+        "datetime": "2026-10-10T20:00:00.000Z",
+        "image_url": "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=800"
+      }
+    ]
+  }
+]

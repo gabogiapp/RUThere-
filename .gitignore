@@ -4,6 +4,15 @@
 .env.*.local
 *.env
 
+# Dependencies & Build
+node_modules/
+.next/
+out/
+.data/
+scraped_results.json
+
+
+
 # Python
 __pycache__/
 *.py[cod]
