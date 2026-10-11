@@ -334,6 +334,11 @@ Examples:
     const completed = taggedClubs.length;
     const progress = Math.round((completed / clubs.length) * 100);
     process.stdout.write(`   Batch [${batchCount}/${batches.length}] (${progress}%) Processed ${completed}/${clubs.length} clubs\r`);
+
+    // Pacer: space requests by 4.3s to strictly respect the 14 RPM limit on Google AI Studio
+    if (batchCount < batches.length && apiKey) {
+      await new Promise((r) => setTimeout(r, 4300));
+    }
   }
 
   console.log(`\n\n💾 Upserting ${taggedClubs.length} clubs into Neon PostgreSQL...`);

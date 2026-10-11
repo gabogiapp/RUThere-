@@ -7,18 +7,138 @@ const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
 
 /**
+ * Multi-Key Pool with Round-Robin Rotation & 429 Isolation.
+ * Automatically loads keys from:
+ * 1. GEMINI_API_KEYS (comma or newline separated list of keys)
+ * 2. GEMINI_API_KEY_1, GEMINI_API_KEY_2, GEMINI_API_KEY_3...
+ * 3. GEMINI_API_KEY (single key or comma-separated)
+ */
+export class GeminiKeyPool {
+  private keys: Array<{ key: string; cooldownUntil: number; label: string }> = [];
+  private currentIndex = 0;
+
+  constructor() {
+    this.reloadKeys();
+  }
+
+  public reloadKeys(): void {
+    const rawKeys: string[] = [];
+
+    // 1. Comma or newline separated list: GEMINI_API_KEYS
+    if (process.env.GEMINI_API_KEYS) {
+      rawKeys.push(...process.env.GEMINI_API_KEYS.split(/[\n,]/).map((k) => k.trim()).filter(Boolean));
+    }
+
+    // 2. Numbered keys: GEMINI_API_KEY_1, GEMINI_API_KEY_2, GEMINI_API_KEY_3...
+    for (let i = 1; i <= 10; i++) {
+      const numberedKey = process.env[`GEMINI_API_KEY_${i}`]?.trim();
+      if (numberedKey) rawKeys.push(numberedKey);
+    }
+
+    // 3. Fallback: GEMINI_API_KEY (supports single key or comma-separated list)
+    if (process.env.GEMINI_API_KEY) {
+      rawKeys.push(...process.env.GEMINI_API_KEY.split(/[\n,]/).map((k) => k.trim()).filter(Boolean));
+    }
+
+    const unique = Array.from(new Set(rawKeys.filter(Boolean)));
+    this.keys = unique.map((key, idx) => ({
+      key,
+      cooldownUntil: 0,
+      label: `Account Key #${idx + 1} (...${key.slice(-4)})`,
+    }));
+  }
+
+  public get totalKeys(): number {
+    return this.keys.length;
+  }
+
+  public get activeKeyCount(): number {
+    const now = Date.now();
+    return this.keys.filter((k) => k.cooldownUntil <= now).length;
+  }
+
+  /**
+   * Returns the next available key in round-robin order, skipping keys currently in cooldown.
+   * If all keys are in cooldown, picks the one that cools down earliest.
+   */
+  public getNextKey(): { key: string; label: string; index: number } | null {
+    if (this.keys.length === 0) {
+      this.reloadKeys();
+      if (this.keys.length === 0) return null;
+    }
+
+    const now = Date.now();
+    // Round-robin selection among non-cooldown keys
+    for (let i = 0; i < this.keys.length; i++) {
+      const idx = (this.currentIndex + i) % this.keys.length;
+      const candidate = this.keys[idx];
+      if (candidate.cooldownUntil <= now) {
+        this.currentIndex = (idx + 1) % this.keys.length;
+        return { key: candidate.key, label: candidate.label, index: idx };
+      }
+    }
+
+    // If all keys are in cooldown, pick the one that cools down earliest
+    let earliestIdx = 0;
+    let earliestTime = this.keys[0].cooldownUntil;
+    for (let i = 1; i < this.keys.length; i++) {
+      if (this.keys[i].cooldownUntil < earliestTime) {
+        earliestTime = this.keys[i].cooldownUntil;
+        earliestIdx = i;
+      }
+    }
+
+    const chosen = this.keys[earliestIdx];
+    this.currentIndex = (earliestIdx + 1) % this.keys.length;
+    return { key: chosen.key, label: chosen.label, index: earliestIdx };
+  }
+
+  /**
+   * Quarantines a key upon receiving an HTTP 429 response so subsequent calls rotate to other keys.
+   */
+  public markCooldown(keyToCooldown: string, durationMs: number): void {
+    const target = Date.now() + durationMs;
+    const entry = this.keys.find((k) => k.key === keyToCooldown);
+    if (entry) {
+      entry.cooldownUntil = Math.max(entry.cooldownUntil, target);
+      const remainingActive = this.activeKeyCount;
+      console.warn(
+        `[GeminiKeyPool] ${entry.label} placed in cooldown for ${(durationMs / 1000).toFixed(1)}s. Active keys remaining: ${remainingActive}/${this.keys.length}`
+      );
+    }
+  }
+}
+
+export const keyPool = new GeminiKeyPool();
+
+/**
  * Sliding window + minimum spacing rate limiter for Google Gemini API.
- * Default: 14 RPM (strictly beneath Google AI Studio's 15 RPM free tier cap).
- * Configurable via GEMINI_RPM environment variable (e.g. 500-1000 for Pay-As-You-Go).
+ * Default: 14 RPM per active key (e.g. 14 RPM with 1 key, 42 RPM with 3 keys).
+ * Configurable via GEMINI_RPM environment variable.
  */
 export class GeminiRateLimiter {
   private queue: Array<() => void> = [];
   private requestTimestamps: number[] = [];
-  private processing = false;
+  private timer: NodeJS.Timeout | null = null;
+  private pausedUntil = 0;
 
   public get rpm(): number {
-    const val = parseInt(process.env.GEMINI_RPM || "14", 10);
-    return isNaN(val) || val <= 0 ? 14 : val;
+    const baseRpmPerKey = parseInt(process.env.GEMINI_RPM || "14", 10);
+    const validBase = isNaN(baseRpmPerKey) || baseRpmPerKey <= 0 ? 14 : baseRpmPerKey;
+    // Scale system throughput proportionally by the number of active, rotating keys
+    const activeKeys = Math.max(1, keyPool.activeKeyCount);
+    return validBase * activeKeys;
+  }
+
+  /**
+   * Pauses all queued requests for a specified duration (e.g. upon HTTP 429 rate limit backoff).
+   */
+  public pause(durationMs: number): void {
+    const target = Date.now() + durationMs;
+    if (target > this.pausedUntil) {
+      this.pausedUntil = target;
+    }
+    this.scheduleNext();
   }
 
   public async acquire(): Promise<void> {
@@ -28,14 +148,20 @@ export class GeminiRateLimiter {
     });
   }
 
-  private scheduleNext() {
-    if (this.processing || this.queue.length === 0) return;
-    this.processing = true;
+  private scheduleNext(): void {
+    if (this.queue.length === 0) return;
+
+    // Clear any existing timer to prevent duplicate timer triggers
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
 
     const now = Date.now();
     const currentRpm = this.rpm;
     const windowMs = 60000;
-    const minSpacingMs = Math.ceil(windowMs / currentRpm);
+    // Buffer spacing by 25ms to ensure strict compliance under network and timer jitter
+    const minSpacingMs = Math.ceil(windowMs / currentRpm) + 25;
 
     // Evict timestamps older than 60 seconds
     this.requestTimestamps = this.requestTimestamps.filter((t) => now - t < windowMs);
@@ -55,23 +181,30 @@ export class GeminiRateLimiter {
     // Check 2: Rolling 60-second window capacity
     if (this.requestTimestamps.length >= currentRpm) {
       const oldestInWindow = this.requestTimestamps[0];
-      const waitToSlide = windowMs - (now - oldestInWindow) + 150;
+      const waitToSlide = windowMs - (now - oldestInWindow) + 100;
       delayMs = Math.max(delayMs, waitToSlide);
     }
 
+    // Check 3: Respect global backoff pause from 429 responses
+    if (now < this.pausedUntil) {
+      delayMs = Math.max(delayMs, this.pausedUntil - now);
+    }
+
     if (delayMs > 0) {
-      setTimeout(() => {
-        this.processing = false;
+      this.timer = setTimeout(() => {
+        this.timer = null;
         this.scheduleNext();
       }, delayMs);
     } else {
       this.requestTimestamps.push(Date.now());
       const nextResolve = this.queue.shift();
-      this.processing = false;
       if (nextResolve) nextResolve();
 
       if (this.queue.length > 0) {
-        setTimeout(() => this.scheduleNext(), minSpacingMs);
+        this.timer = setTimeout(() => {
+          this.timer = null;
+          this.scheduleNext();
+        }, minSpacingMs);
       }
     }
   }
@@ -80,27 +213,39 @@ export class GeminiRateLimiter {
 export const geminiLimiter = new GeminiRateLimiter();
 
 /**
- * Fetch wrapper for Gemini API with rate limiting and exponential backoff on HTTP 429 / 503
+ * Fetch wrapper for Gemini API with key rotation, rate limiting, and exponential backoff
  */
 export async function fetchGeminiWithRetry(
-  url: string,
+  urlOrBase: string,
   options: RequestInit,
+  explicitApiKey?: string,
   maxRetries = 4
 ): Promise<Response> {
   let attempt = 0;
+
   while (attempt <= maxRetries) {
     await geminiLimiter.acquire();
 
+    // Select key: explicit key if specified, otherwise round-robin from keyPool
+    const keyInfo = explicitApiKey
+      ? { key: explicitApiKey, label: `Explicit Key (...${explicitApiKey.slice(-4)})` }
+      : keyPool.getNextKey();
+
+    const activeKey = keyInfo?.key || process.env.GEMINI_API_KEY || "";
+
+    // Build URL with selected key
+    let targetUrl: string;
+    if (urlOrBase.includes("key=")) {
+      targetUrl = urlOrBase.replace(/key=[^&]+/, `key=${encodeURIComponent(activeKey)}`);
+    } else {
+      targetUrl = `${urlOrBase}${urlOrBase.includes("?") ? "&" : "?"}key=${encodeURIComponent(activeKey)}`;
+    }
+
     try {
-      const res = await fetch(url, options);
+      const res = await fetch(targetUrl, options);
 
       if (res.status === 429 || res.status === 503) {
         attempt++;
-        if (attempt > maxRetries) {
-          console.warn(`[GeminiExtractor] HTTP ${res.status} returned and exhausted all ${maxRetries} retries.`);
-          return res;
-        }
-
         const retryAfterHeader = res.headers.get("retry-after");
         let backoffMs: number;
         if (retryAfterHeader) {
@@ -111,10 +256,32 @@ export async function fetchGeminiWithRetry(
           backoffMs = Math.min(60000, Math.pow(2, attempt) * 3500 + Math.random() * 2000);
         }
 
-        console.warn(
-          `[GeminiExtractor] HTTP ${res.status} (Resource Exhausted / Rate Limit). Retrying in ${(backoffMs / 1000).toFixed(1)}s (attempt ${attempt}/${maxRetries})...`
-        );
-        await new Promise((r) => setTimeout(r, backoffMs));
+        // Quarantine this specific key so rotation immediately skips it
+        if (activeKey) {
+          keyPool.markCooldown(activeKey, backoffMs);
+        }
+
+        // If ALL keys in the pool are now exhausted/in cooldown, pause the limiter globally
+        if (keyPool.activeKeyCount === 0) {
+          geminiLimiter.pause(backoffMs);
+          console.warn(
+            `[GeminiExtractor] All API keys in cooldown. Limiter paused for ${(backoffMs / 1000).toFixed(1)}s.`
+          );
+        } else {
+          console.warn(
+            `[GeminiExtractor] HTTP ${res.status} on ${keyInfo?.label || "key"}. Retrying immediately with next active key in pool (attempt ${attempt}/${maxRetries})...`
+          );
+        }
+
+        if (attempt > maxRetries) {
+          console.warn(`[GeminiExtractor] Exhausted all ${maxRetries} retries.`);
+          return res;
+        }
+
+        // Only sleep if all keys are exhausted
+        if (keyPool.activeKeyCount === 0) {
+          await new Promise((r) => setTimeout(r, backoffMs));
+        }
         continue;
       }
 
@@ -326,7 +493,7 @@ export async function extractEventWithGemini(
     apiKey?: string;
   }
 ): Promise<ExtractedEventSchema & { extraction_source: "gemini" | "heuristic" }> {
-  const key = options?.apiKey || process.env.GEMINI_API_KEY;
+  const hasKeys = Boolean(options?.apiKey) || keyPool.totalKeys > 0 || Boolean(process.env.GEMINI_API_KEY);
   const clubInfo = {
     name: options?.clubName,
     handle: options?.clubHandle,
@@ -339,7 +506,7 @@ export async function extractEventWithGemini(
     return { ...fb, post_url: options?.postUrl, image_url: options?.imageUrl, video_url: options?.videoUrl, extraction_source: "heuristic" };
   }
 
-  if (!key) {
+  if (!hasKeys) {
     console.warn("[GeminiExtractor] No GEMINI_API_KEY found, using heuristic parser.");
     const fb = fallbackExtractor(caption, clubInfo);
     return {
@@ -351,7 +518,7 @@ export async function extractEventWithGemini(
     };
   }
 
-  const endpoint = `${GEMINI_BASE_URL}/models/${GEMINI_MODEL}:generateContent?key=${key}`;
+  const endpoint = `${GEMINI_BASE_URL}/models/${GEMINI_MODEL}:generateContent`;
   const exampleSchema = getExampleSchema();
 
   // Fetch flyer image if present
@@ -385,12 +552,16 @@ export async function extractEventWithGemini(
   };
 
   try {
-    const res = await fetchGeminiWithRetry(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(20000),
-    });
+    const res = await fetchGeminiWithRetry(
+      endpoint,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(20000),
+      },
+      options?.apiKey
+    );
 
     if (!res.ok) {
       const errText = await res.text();
@@ -461,14 +632,14 @@ export async function extractEventsBatchWithGemini(
   apiKey?: string
 ): Promise<Map<string, ExtractedEventSchema & { extraction_source: "gemini" | "heuristic" }>> {
   const resultMap = new Map<string, ExtractedEventSchema & { extraction_source: "gemini" | "heuristic" }>();
-  const key = apiKey || process.env.GEMINI_API_KEY;
+  const hasKeys = Boolean(apiKey) || keyPool.totalKeys > 0 || Boolean(process.env.GEMINI_API_KEY);
 
   if (!posts || posts.length === 0) {
     return resultMap;
   }
 
   // If no Gemini API key, use fallback extractor for all
-  if (!key) {
+  if (!hasKeys) {
     console.warn("[GeminiExtractor] No GEMINI_API_KEY found, using fallback heuristic extractor.");
     for (const post of posts) {
       const fb = fallbackExtractor(post.caption, {
@@ -500,7 +671,7 @@ export async function extractEventsBatchWithGemini(
           clubName: post.club_name,
           clubHandle: post.club_handle,
           clubCategory: post.club_category,
-          apiKey: key,
+          apiKey: apiKey, // when apiKey is undefined, each post rotates through the key pool
         });
         resultMap.set(post.post_id, result);
       } catch (err) {
@@ -541,8 +712,8 @@ export async function extractClubInterestsWithGemini(club: {
   category?: string;
   captions?: string[];
 }): Promise<ClubTaxonomyResult> {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) {
+  const hasKeys = keyPool.totalKeys > 0 || Boolean(process.env.GEMINI_API_KEY);
+  if (!hasKeys) {
     return inferInterestsHeuristically(club);
   }
   try {
@@ -564,7 +735,7 @@ Respond ONLY with a valid JSON object in this exact shape:
 }
 No markdown backticks.`;
 
-    const res = await fetchGeminiWithRetry(`${GEMINI_BASE_URL}/models/${GEMINI_MODEL}:generateContent?key=${key}`, {
+    const res = await fetchGeminiWithRetry(`${GEMINI_BASE_URL}/models/${GEMINI_MODEL}:generateContent`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
