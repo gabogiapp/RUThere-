@@ -192,8 +192,18 @@ export function parseDateString(dateStr: string, referenceYear = new Date().getF
  * Parses time string like "8:00 PM - 9:30 PM", "7:00 PM", "12 PM - 2 PM"
  * Returns startMinutes, endMinutes (0 - 1440)
  */
-export function parseTimeString(timeStr: string): { startMinutes: number; endMinutes: number; display: string } {
-  const fallback = { startMinutes: 18 * 60, endMinutes: 19 * 60 + 30, display: timeStr || '6:00 PM - 7:30 PM' };
+export function parseTimeString(timeStr: string): { startMinutes: number; endMinutes: number; display: string; isAllDay: boolean } {
+  const isAllDay = /all[- ]?day/i.test(timeStr || '') || /24[- ]?hour/i.test(timeStr || '');
+  if (isAllDay) {
+    return {
+      startMinutes: 0,
+      endMinutes: 1440,
+      display: 'All Day',
+      isAllDay: true,
+    };
+  }
+
+  const fallback = { startMinutes: 18 * 60, endMinutes: 19 * 60 + 30, display: timeStr || '6:00 PM - 7:30 PM', isAllDay: false };
   if (!timeStr) return fallback;
 
   const parts = timeStr.split(/-|–|to/i).map(s => s.trim());
@@ -234,6 +244,7 @@ export function parseTimeString(timeStr: string): { startMinutes: number; endMin
     startMinutes: start,
     endMinutes: end,
     display: timeStr,
+    isAllDay: false,
   };
 }
 
@@ -339,6 +350,7 @@ export function enrichEvent(item: BackendEventItem, idx: number): CalendarEvent 
 
   const rawCampus = item.campus || 'College Ave';
   const campus = (rawCampus === 'Cook/Douglass' ? 'Cook/Doug' : rawCampus) as RutgersCampus;
+  const is_all_day = Boolean(item.is_all_day || timeInfo.isAllDay);
 
   return {
     ...item,
@@ -348,6 +360,7 @@ export function enrichEvent(item: BackendEventItem, idx: number): CalendarEvent 
     category,
     campus,
     color_scheme: color,
+    is_all_day,
     parsedDate,
     startMinutes: timeInfo.startMinutes,
     endMinutes: timeInfo.endMinutes,

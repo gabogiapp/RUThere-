@@ -27,6 +27,8 @@ export const DayView: React.FC = () => {
   const isToday = isSameDay(currentDate, today);
 
   const dayEvents = filteredEvents.filter((e) => e.parsedDate === dateKey);
+  const allDayEvents = dayEvents.filter((e) => e.is_all_day);
+  const timedEvents = dayEvents.filter((e) => !e.is_all_day);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -63,6 +65,52 @@ export const DayView: React.FC = () => {
           {dayEvents.length} {dayEvents.length === 1 ? 'event' : 'events'} scheduled
         </p>
       </div>
+
+      {/* All-Day Events Section (at the top of the calendar) */}
+      {allDayEvents.length > 0 && (
+        <div className="flex items-center border-b border-[var(--border-color)] bg-[var(--bg-secondary)] pr-4 py-2.5 shrink-0">
+          <div className="w-20 shrink-0 flex items-center justify-center text-center text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
+            All-Day
+          </div>
+          <div className="flex flex-1 flex-wrap items-center gap-2">
+            {allDayEvents.map((event) => {
+              const palette = COLOR_MAP[event.color_scheme];
+              const campusColor = getCampusColor(event.campus);
+
+              return (
+                <div
+                  key={event.id}
+                  onClick={() => setSelectedEvent(event)}
+                  style={{
+                    backgroundColor: palette.fill,
+                    color: palette.ink,
+                  }}
+                  className="group flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--border-subtle)] px-3 py-1.5 shadow-2xs transition-all hover:shadow-xs hover:brightness-[0.98]"
+                >
+                  <span
+                    className="size-2 rounded-full shrink-0"
+                    style={{ backgroundColor: palette.bar }}
+                  />
+                  <span className="text-[12px] font-bold">{event.title}</span>
+                  <span className={`rounded-md border px-1.5 py-0.2 text-[10px] font-semibold ${palette.badge}`}>
+                    {event.category}
+                  </span>
+                  <span
+                    className="rounded-md border px-1.5 py-0.2 text-[10px] font-semibold"
+                    style={{
+                      backgroundColor: campusColor.bg,
+                      color: campusColor.text,
+                      borderColor: campusColor.border,
+                    }}
+                  >
+                    {event.campus}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Grid container */}
       <div
@@ -102,14 +150,14 @@ export const DayView: React.FC = () => {
             </div>
           )}
 
-          {dayEvents.length === 0 ? (
+          {timedEvents.length === 0 && allDayEvents.length === 0 ? (
             <div className="flex h-96 flex-col items-center justify-center text-[var(--text-muted)]">
               <Calendar size={32} className="opacity-30 mb-2" />
               <p className="text-[14px] font-medium">No club events on this day</p>
               <p className="text-[12px]">Check other days or search for specific clubs</p>
             </div>
           ) : (
-            dayEvents.map((event) => {
+            timedEvents.map((event) => {
               const palette = COLOR_MAP[event.color_scheme];
               const campusColor = getCampusColor(event.campus);
               const clampedStart = Math.max(event.startMinutes, START_HOUR * 60);

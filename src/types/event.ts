@@ -5,6 +5,7 @@ export interface BackendEventItem {
   time: string; // e.g. "8:00 PM - 9:30 PM", "7:00 PM"
   location: string;
   important_links: string[];
+  is_all_day?: boolean;
   
   // Optional enriched metadata (from scraper / user tags / club catalog)
   id?: string;
@@ -51,6 +52,7 @@ export interface CalendarEvent extends BackendEventItem {
   category: ClubCategory;
   campus: RutgersCampus;
   color_scheme: ColorVariant;
+  is_all_day: boolean;
   // Computed time attributes
   parsedDate: string; // ISO format YYYY-MM-DD
   startMinutes: number; // minutes from 00:00 (e.g. 18:00 -> 1080)
