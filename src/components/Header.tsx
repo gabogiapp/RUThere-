@@ -342,114 +342,116 @@ export const Header: React.FC = () => {
         {/* 3. Right Group: Month Navigation Bar (to the left of View Selector) & View Selector */}
         <div className="flex items-center gap-1.5 sm:gap-2">
           
-          {/* Month Bar with Arrows and Interactive Month Calendar Popover */}
-          <div ref={monthRef} className="relative flex items-center rounded-xl bg-white/95 px-1 py-1 ring-1 ring-black/10 shrink-0 shadow-xs">
-            <button
-              type="button"
-              onClick={() => navigateDate('prev')}
-              className="flex size-7 items-center justify-center rounded-lg text-gray-700 hover:bg-black/5 hover:text-[#141414] transition-colors"
-              title="Previous month"
-            >
-              <ChevronLeft size={16} />
-            </button>
-            
-            <button
-              type="button"
-              onClick={() => {
-                setCalendarPopoverOpen((prev) => !prev);
-                setCampusDropdownOpen(false);
-                setCategoryDropdownOpen(false);
-              }}
-              className="flex items-center gap-1 px-2 py-0.5 text-[13px] font-bold text-[#141414] hover:text-[#cc0033] transition-colors min-w-[95px] sm:min-w-[125px] justify-center"
-              title="Click to view month calendar"
-            >
-              <span className="truncate">{formattedMonthYear}</span>
-              <ChevronDown
-                size={12}
-                className={`text-gray-500 transition-transform duration-150 ${
-                  calendarPopoverOpen ? 'rotate-180 text-[#cc0033]' : ''
-                }`}
-              />
-            </button>
+          {/* Month Bar with Arrows and Interactive Month Calendar Popover (hidden when in List view) */}
+          {view !== 'agenda' && (
+            <div ref={monthRef} className="relative flex items-center rounded-xl bg-white/95 px-1 py-1 ring-1 ring-black/10 shrink-0 shadow-xs">
+              <button
+                type="button"
+                onClick={() => navigateDate('prev')}
+                className="flex size-7 items-center justify-center rounded-lg text-gray-700 hover:bg-black/5 hover:text-[#141414] transition-colors"
+                title="Previous month"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              
+              <button
+                type="button"
+                onClick={() => {
+                  setCalendarPopoverOpen((prev) => !prev);
+                  setCampusDropdownOpen(false);
+                  setCategoryDropdownOpen(false);
+                }}
+                className="flex items-center gap-1 px-2 py-0.5 text-[13px] font-bold text-[#141414] hover:text-[#cc0033] transition-colors min-w-[95px] sm:min-w-[125px] justify-center"
+                title="Click to view month calendar"
+              >
+                <span className="truncate">{formattedMonthYear}</span>
+                <ChevronDown
+                  size={12}
+                  className={`text-gray-500 transition-transform duration-150 ${
+                    calendarPopoverOpen ? 'rotate-180 text-[#cc0033]' : ''
+                  }`}
+                />
+              </button>
 
-            <button
-              type="button"
-              onClick={() => navigateDate('next')}
-              className="flex size-7 items-center justify-center rounded-lg text-gray-700 hover:bg-black/5 hover:text-[#141414] transition-colors"
-              title="Next month"
-            >
-              <ChevronRight size={16} />
-            </button>
+              <button
+                type="button"
+                onClick={() => navigateDate('next')}
+                className="flex size-7 items-center justify-center rounded-lg text-gray-700 hover:bg-black/5 hover:text-[#141414] transition-colors"
+                title="Next month"
+              >
+                <ChevronRight size={16} />
+              </button>
 
-            {/* Small Month Calendar Popover */}
-            {calendarPopoverOpen && (
-              <div className="absolute right-0 top-11 z-50 w-72 rounded-2xl border border-[var(--border-color)] bg-white p-3.5 shadow-2xl animate-fade-in text-[12px]">
-                {/* Popover Header */}
-                <div className="flex items-center justify-between pb-2 border-b border-gray-100 mb-2">
-                  <span className="text-[13px] font-bold text-[#141414]">
-                    {formattedMonthYear}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      goToToday();
-                      setCalendarPopoverOpen(false);
-                    }}
-                    className="rounded-md bg-[#cc0033]/10 px-2 py-0.5 text-[11px] font-semibold text-[#cc0033] hover:bg-[#cc0033]/20 transition-colors"
-                  >
-                    Today
-                  </button>
+              {/* Small Month Calendar Popover */}
+              {calendarPopoverOpen && (
+                <div className="absolute right-0 top-11 z-50 w-72 rounded-2xl border border-[var(--border-color)] bg-white p-3.5 shadow-2xl animate-fade-in text-[12px]">
+                  {/* Popover Header */}
+                  <div className="flex items-center justify-between pb-2 border-b border-gray-100 mb-2">
+                    <span className="text-[13px] font-bold text-[#141414]">
+                      {formattedMonthYear}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        goToToday();
+                        setCalendarPopoverOpen(false);
+                      }}
+                      className="rounded-md bg-[#cc0033]/10 px-2 py-0.5 text-[11px] font-semibold text-[#cc0033] hover:bg-[#cc0033]/20 transition-colors"
+                    >
+                      Today
+                    </button>
+                  </div>
+
+                  {/* Days of week */}
+                  <div className="grid grid-cols-7 gap-1 text-center font-semibold text-gray-400 text-[10px] uppercase mb-1">
+                    {['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map((d) => (
+                      <div key={d} className="py-1">
+                        {d}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Days Grid */}
+                  <div className="grid grid-cols-7 gap-1">
+                    {popoverDays.map((dayObj, idx) => {
+                      const isSelected = isSameDay(dayObj.date, currentDate);
+                      const dateKey = formatIsoDate(dayObj.date);
+                      const hasEvents = eventDateSet.has(dateKey);
+
+                      return (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            setCurrentDate(dayObj.date);
+                            setCalendarPopoverOpen(false);
+                          }}
+                          className={`relative flex h-8 flex-col items-center justify-center rounded-lg text-[12px] font-medium transition-all ${
+                            isSelected
+                              ? 'bg-[#cc0033] text-white font-bold shadow-xs'
+                              : dayObj.isToday
+                              ? 'ring-1 ring-[#cc0033] text-[#cc0033] font-bold hover:bg-red-50'
+                              : !dayObj.isCurrentMonth
+                              ? 'text-gray-300 hover:text-gray-600 hover:bg-gray-50'
+                              : 'text-gray-800 hover:bg-gray-100 hover:text-black'
+                          }`}
+                        >
+                          <span>{dayObj.date.getDate()}</span>
+                          {hasEvents && (
+                            <span
+                              className={`size-1 rounded-full ${
+                                isSelected ? 'bg-white' : 'bg-[#cc0033]'
+                              }`}
+                            />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-
-                {/* Days of week */}
-                <div className="grid grid-cols-7 gap-1 text-center font-semibold text-gray-400 text-[10px] uppercase mb-1">
-                  {['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map((d) => (
-                    <div key={d} className="py-1">
-                      {d}
-                    </div>
-                  ))}
-                </div>
-
-                {/* Days Grid */}
-                <div className="grid grid-cols-7 gap-1">
-                  {popoverDays.map((dayObj, idx) => {
-                    const isSelected = isSameDay(dayObj.date, currentDate);
-                    const dateKey = formatIsoDate(dayObj.date);
-                    const hasEvents = eventDateSet.has(dateKey);
-
-                    return (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => {
-                          setCurrentDate(dayObj.date);
-                          setCalendarPopoverOpen(false);
-                        }}
-                        className={`relative flex h-8 flex-col items-center justify-center rounded-lg text-[12px] font-medium transition-all ${
-                          isSelected
-                            ? 'bg-[#cc0033] text-white font-bold shadow-xs'
-                            : dayObj.isToday
-                            ? 'ring-1 ring-[#cc0033] text-[#cc0033] font-bold hover:bg-red-50'
-                            : !dayObj.isCurrentMonth
-                            ? 'text-gray-300 hover:text-gray-600 hover:bg-gray-50'
-                            : 'text-gray-800 hover:bg-gray-100 hover:text-black'
-                        }`}
-                      >
-                        <span>{dayObj.date.getDate()}</span>
-                        {hasEvents && (
-                          <span
-                            className={`size-1 rounded-full ${
-                              isSelected ? 'bg-white' : 'bg-[#cc0033]'
-                            }`}
-                          />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
 
           {/* 4. View Selector (Day, Week, Month, List) */}
           <div className="flex items-center rounded-xl bg-white/95 p-1 ring-1 ring-black/10 shrink-0 shadow-xs">

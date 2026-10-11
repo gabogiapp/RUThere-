@@ -1,17 +1,39 @@
 # Environment Variables
 .env
-.env.local
-.env.*.local
+.env*.local
+.env.development
+.env.production
 *.env
+!.env.example
+
+# Local Database & Scraped Data
+.data/
+*.db
+*.sqlite
+scraped_results*.json
+real_*.json
+snapshot_*.json
+test*.py
 
 # Dependencies & Build
 node_modules/
 .next/
 out/
 dist/
+build/
 *.tsbuildinfo
-.data/
-scraped_results.json
+coverage/
+.vercel
+.turbo
+
+# Logs & Debug
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
 # Python
 __pycache__/
@@ -19,7 +41,6 @@ __pycache__/
 *$py.class
 *.so
 .Python
-build/
 develop-eggs/
 downloads/
 eggs/
@@ -52,4 +73,9 @@ env/
 
 # Operating System Files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db

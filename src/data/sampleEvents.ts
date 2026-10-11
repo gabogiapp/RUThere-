@@ -55,6 +55,24 @@ export const SAMPLE_BACKEND_EVENTS: BackendEventItem[] = [
   },
   {
     is_event: true,
+    title: "Rutgers Fall Involvement Fair & Clubs Showcase",
+    date: "Wednesday, Oct 14",
+    time: "All Day",
+    location: "College Avenue Gym & Morrell Street",
+    important_links: [
+      "https://involvement.rutgers.edu",
+      "https://instagram.com/rutgersinvolvement"
+    ],
+    club_name: "Rutgers Student Involvement Office",
+    club_handle: "@rutgersinvolvement",
+    category: "Social & Student Life",
+    campus: "College Ave",
+    description: "Explore over 500+ student organizations, club sports, cultural associations, and professional societies across Rutgers. Food trucks and giveaways!",
+    color_scheme: "coral",
+    is_all_day: true
+  },
+  {
+    is_event: true,
     title: "Arduino Microcontrollers & Sensor Lab",
     date: "Wednesday, Oct 14",
     time: "6:30 PM - 8:30 PM",
@@ -69,6 +87,23 @@ export const SAMPLE_BACKEND_EVENTS: BackendEventItem[] = [
     campus: "Busch",
     description: "Hands-on hardware lab building ultrasonic distance meters and LED matrices. Hardware kits provided for all attendees.",
     color_scheme: "teal"
+  },
+  {
+    is_event: true,
+    title: "Web3 & Blockchain Smart Contract Workshop",
+    date: "Wednesday, Oct 14",
+    time: "7:30 PM - 9:00 PM",
+    location: "CoRE Building Room 101, Busch Campus",
+    important_links: [
+      "https://discord.gg/rutgersblockchain",
+      "https://instagram.com/rutgersblockchain"
+    ],
+    club_name: "Rutgers Blockchain Club",
+    club_handle: "@rutgersblockchain",
+    category: "Tech & Coding",
+    campus: "Busch",
+    description: "Learn Solidity and deploy your first smart contract on Ethereum testnet. Pizza and drinks provided!",
+    color_scheme: "blue"
   },
   {
     is_event: true,

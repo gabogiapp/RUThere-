@@ -113,7 +113,7 @@ export async function upsertClub(club: Partial<ClubRecord>): Promise<ClubRecord>
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        ON CONFLICT (handle) DO UPDATE SET
          name = EXCLUDED.name,
-         category = EXCLUDED.category,
+         category = COALESCE(clubs.category, EXCLUDED.category),
          url = EXCLUDED.url,
          biography = COALESCE(EXCLUDED.biography, clubs.biography),
          followers = COALESCE(EXCLUDED.followers, clubs.followers),
@@ -162,6 +162,7 @@ export async function getEvents(): Promise<EventRecord[]> {
         e.club_id,
         c.handle as club_handle,
         c.name as club_name,
+        c.category as club_category,
         e.instagram_post_id,
         e.post_url,
         e.title,
@@ -190,7 +191,7 @@ export async function getEvents(): Promise<EventRecord[]> {
       time: row.event_time ? new Date(row.event_time).toLocaleTimeString() : "",
       location: row.location || "Rutgers University",
       campus: row.campus || "College Ave",
-      category: row.category || "Social & Student Life",
+      category: row.category || row.club_category || "Social & Student Life",
       image_url: row.image_url,
       flyer_details: row.flyer_details,
       description: row.description || "",
@@ -224,6 +225,7 @@ export async function processAndStoreBrightData(
 ): Promise<{ clubsUpdated: number; eventsExtracted: number; events: EventRecord[] }> {
   let clubsUpdated = 0;
   const newEvents: EventRecord[] = [];
+  const db = getPool();
 
   for (const rec of records) {
     const handle = rec.account || (rec.url ? rec.url.split("/").filter(Boolean).pop() : "");
@@ -284,6 +286,13 @@ export async function processAndStoreBrightData(
             new Set([...(extracted.important_links || []), postUrl].filter(Boolean))
           );
 
+          let eventTimeStr = post.datetime || new Date().toISOString();
+          try {
+            eventTimeStr = new Date(eventTimeStr).toISOString();
+          } catch {
+            eventTimeStr = new Date().toISOString();
+          }
+
           const newEvent: EventRecord = {
             id: post.id || `post_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
             club_id: club.id,
@@ -302,10 +311,38 @@ export async function processAndStoreBrightData(
             image_url: post.image_url || extracted.image_url,
             flyer_details: extracted.flyer_details || "",
             is_event: true,
-            event_time: post.datetime || new Date().toISOString(),
+            event_time: eventTimeStr,
             created_at: new Date().toISOString(),
             extraction_source: extracted.extraction_source,
           };
+
+          // If connected to Neon Postgres, also persist directly
+          if (db && club && club.id) {
+            try {
+              await db.query(
+                `INSERT INTO events (club_id, instagram_post_id, post_url, title, event_time, location, description)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)
+                 ON CONFLICT (instagram_post_id) DO UPDATE SET
+                   club_id = EXCLUDED.club_id,
+                   post_url = EXCLUDED.post_url,
+                   title = EXCLUDED.title,
+                   event_time = COALESCE(EXCLUDED.event_time, events.event_time),
+                   location = COALESCE(EXCLUDED.location, events.location),
+                   description = EXCLUDED.description`,
+                [
+                  club.id,
+                  postId,
+                  postUrl,
+                  extracted.title,
+                  eventTimeStr,
+                  extracted.location,
+                  post.caption || "",
+                ]
+              );
+            } catch (err) {
+              console.warn(`Failed to insert event for post ${postId} into Neon:`, err);
+            }
+          }
 
           await upsertEvent(newEvent);
           newEvents.push(newEvent);

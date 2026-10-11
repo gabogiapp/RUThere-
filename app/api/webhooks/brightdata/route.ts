@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { processAndStoreBrightData } from "../../../../lib/db";
 import { BrightDataProfileRecord } from "../../../../lib/types";
+import { BrightDataClient } from "../../../../lib/brightdata";
 
 export async function POST(req: NextRequest) {
   try {
@@ -24,7 +25,18 @@ export async function POST(req: NextRequest) {
     const payload = await req.json();
     console.log("[/api/webhooks/brightdata] Webhook received payload:", Array.isArray(payload) ? `${payload.length} items` : typeof payload);
 
-    const records: BrightDataProfileRecord[] = Array.isArray(payload) ? payload : [payload];
+    let records: BrightDataProfileRecord[] = [];
+    if (Array.isArray(payload)) {
+      records = payload;
+    } else if (payload && (payload.snapshot_id || payload.id)) {
+      const snapId = payload.snapshot_id || payload.id;
+      console.log(`[/api/webhooks/brightdata] Snapshot notification received: ${snapId}. Fetching snapshot data...`);
+      const client = new BrightDataClient();
+      records = await client.downloadSnapshot(snapId);
+    } else if (payload && (payload.account || payload.url)) {
+      records = [payload];
+    }
+
     const result = await processAndStoreBrightData(records);
 
     console.log(`[/api/webhooks/brightdata] Ingestion success: ${result.clubsUpdated} clubs updated, ${result.eventsExtracted} events extracted.`);

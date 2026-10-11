@@ -17,9 +17,10 @@ export class BrightDataClient {
   }
 
   async trigger(urls: string[], webhookUrl?: string): Promise<{ snapshot_id: string }> {
-    const url = `${this.baseUrl}/trigger?dataset_id=${this.datasetId}&include_errors=true${
-      webhookUrl ? `&endpoint=${encodeURIComponent(webhookUrl)}` : ""
-    }`;
+    const webhookParams = webhookUrl
+      ? `&endpoint=${encodeURIComponent(webhookUrl)}&notify=true&uncompressed_webhook=true&format=json`
+      : "";
+    const url = `${this.baseUrl}/trigger?dataset_id=${this.datasetId}&include_errors=true${webhookParams}`;
 
     const payload = urls.map((u) => ({ url: u }));
 

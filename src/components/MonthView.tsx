@@ -41,7 +41,10 @@ export const MonthView: React.FC = () => {
       <div className="grid flex-1 grid-cols-7 grid-rows-5 lg:grid-rows-6 border-b border-[var(--border-subtle)] bg-[var(--border-subtle)] gap-px overflow-y-auto">
         {days.map(({ date, isCurrentMonth, isToday }, idx) => {
           const dateStr = formatIsoDate(date);
-          const dayEvents = eventsByDate[dateStr] || [];
+          const dayEvents = [...(eventsByDate[dateStr] || [])].sort((a, b) => {
+            if (a.is_all_day !== b.is_all_day) return a.is_all_day ? -1 : 1;
+            return a.startMinutes - b.startMinutes;
+          });
 
           return (
             <div
