@@ -6,7 +6,10 @@ export interface BrightDataPostRecord {
   likes?: number;
   comments?: number;
   type?: string;
+  content_type?: string;
   image_url?: string;
+  video_url?: string;
+  video_play_url?: string;
 }
 
 export interface BrightDataProfileRecord {
@@ -56,6 +59,7 @@ export interface EventRecord {
   is_event: boolean;
   created_at?: string;
   image_url?: string;
+  video_url?: string;
   flyer_details?: string;
   extraction_source?: "gemini" | "heuristic";
 }
@@ -71,6 +75,7 @@ export interface ExtractedEventSchema {
   important_links: string[];
   post_url?: string;
   image_url?: string;
+  video_url?: string;
   flyer_details?: string;
 }
 

@@ -10,6 +10,7 @@ export interface PostExtractionInput {
   post_id: string;
   caption: string;
   image_url?: string;
+  video_url?: string;
   post_url?: string;
   club_name?: string;
   club_handle?: string;
@@ -63,6 +64,7 @@ export function getExampleSchema() {
       },
       post_url: { type: "string" },
       image_url: { type: "string" },
+      video_url: { type: "string" },
       flyer_details: {
         type: "string",
         description: "Key information visible directly on the flyer graphic (speakers, food, room, sponsors, instructions).",
@@ -182,6 +184,7 @@ export async function extractEventWithGemini(
   caption: string,
   options?: {
     imageUrl?: string;
+    videoUrl?: string;
     postUrl?: string;
     clubName?: string;
     clubHandle?: string;
@@ -197,9 +200,9 @@ export async function extractEventWithGemini(
   };
 
   // If no caption and no image, return empty non-event
-  if ((!caption || !caption.trim()) && !options?.imageUrl) {
+  if ((!caption || !caption.trim()) && !options?.imageUrl && !options?.videoUrl) {
     const fb = fallbackExtractor("", clubInfo);
-    return { ...fb, post_url: options?.postUrl, image_url: options?.imageUrl, extraction_source: "heuristic" };
+    return { ...fb, post_url: options?.postUrl, image_url: options?.imageUrl, video_url: options?.videoUrl, extraction_source: "heuristic" };
   }
 
   if (!key) {
@@ -209,6 +212,7 @@ export async function extractEventWithGemini(
       ...fb,
       post_url: options?.postUrl,
       image_url: options?.imageUrl,
+      video_url: options?.videoUrl,
       extraction_source: "heuristic",
     };
   }
@@ -275,6 +279,7 @@ export async function extractEventWithGemini(
         ...fb,
         post_url: options?.postUrl,
         image_url: options?.imageUrl,
+        video_url: options?.videoUrl,
         extraction_source: "heuristic",
       };
     }
@@ -295,6 +300,7 @@ export async function extractEventWithGemini(
           : [],
       post_url: options?.postUrl || parsed.post_url,
       image_url: options?.imageUrl || parsed.image_url,
+      video_url: options?.videoUrl || parsed.video_url,
       flyer_details: parsed.flyer_details || "",
       extraction_source: "gemini",
     };
@@ -305,6 +311,7 @@ export async function extractEventWithGemini(
       ...fb,
       post_url: options?.postUrl,
       image_url: options?.imageUrl,
+      video_url: options?.videoUrl,
       extraction_source: "heuristic",
     };
   }
@@ -339,6 +346,7 @@ export async function extractEventsBatchWithGemini(
         ...fb,
         post_url: post.post_url,
         image_url: post.image_url,
+        video_url: post.video_url,
         extraction_source: "heuristic",
       });
     }
@@ -353,6 +361,7 @@ export async function extractEventsBatchWithGemini(
       try {
         const result = await extractEventWithGemini(post.caption, {
           imageUrl: post.image_url,
+          videoUrl: post.video_url,
           postUrl: post.post_url,
           clubName: post.club_name,
           clubHandle: post.club_handle,
@@ -371,6 +380,7 @@ export async function extractEventsBatchWithGemini(
           ...fb,
           post_url: post.post_url,
           image_url: post.image_url,
+          video_url: post.video_url,
           extraction_source: "heuristic",
         });
       }

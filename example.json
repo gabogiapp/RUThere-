@@ -61,6 +61,10 @@
       "type": "string",
       "description": "URL to the scraped flyer/post photo."
     },
+    "video_url": {
+      "type": "string",
+      "description": "URL to the scraped flyer/post video or reel."
+    },
     "flyer_details": {
       "type": "string",
       "description": "Key event information, speakers, food, or instructions visible directly in the flyer graphic."

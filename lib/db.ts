@@ -193,6 +193,7 @@ export async function getEvents(): Promise<EventRecord[]> {
       campus: row.campus || "College Ave",
       category: row.category || row.club_category || "Social & Student Life",
       image_url: row.image_url,
+      video_url: row.video_url,
       flyer_details: row.flyer_details,
       description: row.description || "",
       important_links: row.post_url ? [row.post_url] : [],
@@ -243,8 +244,8 @@ export async function processAndStoreBrightData(
     clubsUpdated++;
 
     const posts = rec.posts || [];
-    // Include posts with captions or flyer images
-    const postsWithContent = posts.filter((p) => (p.caption && p.caption.trim()) || p.image_url);
+    // Include posts with captions, flyer images, or videos
+    const postsWithContent = posts.filter((p) => (p.caption && p.caption.trim()) || p.image_url || p.video_url || p.video_play_url);
     const targetPosts = postsWithContent.slice(0, 8);
 
     if (targetPosts.length > 0) {
@@ -255,10 +256,12 @@ export async function processAndStoreBrightData(
           (p.id && !p.id.startsWith("http")
             ? `https://www.instagram.com/p/${p.id}`
             : `https://www.instagram.com/${handle}`);
+        const videoUrl = p.video_url || p.video_play_url || undefined;
         return {
           post_id: rawId,
           caption: p.caption || "",
           image_url: p.image_url,
+          video_url: videoUrl,
           post_url: postUrl,
           club_name: club.name,
           club_handle: `@${handle}`,
@@ -293,6 +296,8 @@ export async function processAndStoreBrightData(
             eventTimeStr = new Date().toISOString();
           }
 
+          const videoUrl = post.video_url || post.video_play_url || extracted.video_url;
+
           const newEvent: EventRecord = {
             id: post.id || `post_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
             club_id: club.id,
@@ -309,6 +314,7 @@ export async function processAndStoreBrightData(
             description: post.caption,
             important_links: combinedLinks,
             image_url: post.image_url || extracted.image_url,
+            video_url: videoUrl,
             flyer_details: extracted.flyer_details || "",
             is_event: true,
             event_time: eventTimeStr,

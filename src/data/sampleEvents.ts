@@ -34,7 +34,10 @@ export const SAMPLE_BACKEND_EVENTS: BackendEventItem[] = [
     category: "Tech & Coding",
     campus: "Busch",
     description: "Help organize New Jersey's premier 24-hour hackathon. Roles open in Logistics, Dev Team, Sponsorship, and Design.",
-    color_scheme: "blue"
+    color_scheme: "blue",
+    image_url: "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&auto=format&fit=crop&q=80",
+    post_url: "https://www.instagram.com/p/DeSBk2-twyR",
+    flyer_details: "HackRU Fall 2026 • 24hr Hackathon • Mentors, Workshops, Free Food & Swag • CoRE & BSC",
   },
   {
     is_event: true,
@@ -120,7 +123,10 @@ export const SAMPLE_BACKEND_EVENTS: BackendEventItem[] = [
     category: "Engineering",
     campus: "Busch",
     description: "Reviewing FEA stress simulation results for the 2027 monocoque frame and front wing carbon fiber layup schedule.",
-    color_scheme: "teal"
+    color_scheme: "teal",
+    video_url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+    post_url: "https://www.instagram.com/p/DeR0178kv67",
+    flyer_details: "FSAE Aerodynamics & Chassis workshop • Machine shop D-102 • Pizza included!",
   },
   {
     is_event: true,

@@ -17,6 +17,7 @@ export interface BackendEventItem {
   color_scheme?: ColorVariant;
   post_url?: string;
   image_url?: string;
+  video_url?: string;
   flyer_details?: string;
   extraction_source?: 'gemini' | 'heuristic';
 }

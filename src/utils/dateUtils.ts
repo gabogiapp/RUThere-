@@ -365,6 +365,7 @@ export function enrichEvent(item: BackendEventItem, idx: number): CalendarEvent 
     campus,
     post_url: item.post_url,
     image_url: item.image_url,
+    video_url: item.video_url,
     flyer_details: item.flyer_details,
     important_links: links,
     color_scheme: color,
