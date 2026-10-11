@@ -1,0 +1,38 @@
+{
+    "type": "object",
+    "properties": {
+        "is_event": {
+            "type": "boolean",
+            "description": "True if the post announces an upcoming event, false otherwise."
+        },
+        "title": {
+            "type": "string"
+        },
+        "date": {
+            "type": "string",
+            "description": "Day and date (e.g. 'Wednesday, Oct 24')."
+        },
+        "time": {
+            "type": "string",
+            "description": "Start time or time window (e.g. '8:00 PM - 9:30 PM')."
+        },
+        "location": {
+            "type": "string",
+            "description": "Building, room, or virtual platform."
+        },
+        "important_links": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            },
+            "description": "Any form links, registration URLs, or mentions like 'link in bio'."
+        }
+    },
+    "required": [
+        "is_event",
+        "title",
+        "date",
+        "time",
+        "location"
+    ]
+}
