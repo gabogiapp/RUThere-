@@ -60,6 +60,8 @@ async function setup() {
       ALTER TABLE events ADD COLUMN IF NOT EXISTS flyer_details TEXT;
       ALTER TABLE events ADD COLUMN IF NOT EXISTS extraction_source VARCHAR(50);
       ALTER TABLE events ADD COLUMN IF NOT EXISTS has_free_food BOOLEAN DEFAULT FALSE;
+      ALTER TABLE events ADD COLUMN IF NOT EXISTS raw_date VARCHAR(100);
+      ALTER TABLE events ADD COLUMN IF NOT EXISTS raw_time VARCHAR(100);
 
       CREATE INDEX IF NOT EXISTS idx_events_time ON events(event_time);
       CREATE INDEX IF NOT EXISTS idx_events_club_id ON events(club_id);

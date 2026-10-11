@@ -193,14 +193,95 @@ export function getCurrentSemesterRange(referenceDate: Date = new Date()): {
   }
 }
 
-let hasEnsuredFreeFoodColumn = false;
-async function ensureFreeFoodColumn(database: any) {
-  if (hasEnsuredFreeFoodColumn || !database) return;
+const MONTH_MAP: Record<string, number> = {
+  jan: 0, january: 0, feb: 1, february: 1, mar: 2, march: 2,
+  apr: 3, april: 3, may: 4, jun: 5, june: 5, jul: 6, july: 6,
+  aug: 7, august: 7, sep: 8, september: 8, oct: 9, october: 9,
+  nov: 10, november: 10, dec: 11, december: 11
+};
+
+export function computeEventTimestamp(dateStr?: string, timeStr?: string, fallbackIso?: string): string {
+  if (!dateStr || dateStr.toLowerCase().includes("tbd") || dateStr.toLowerCase().includes("n/a")) {
+    return fallbackIso || new Date().toISOString();
+  }
+
+  const trimmed = dateStr.trim();
+  let year = new Date().getFullYear();
+  let month = -1;
+  let day = -1;
+
+  // Format: YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    const parts = trimmed.split("-").map(Number);
+    year = parts[0];
+    month = parts[1] - 1;
+    day = parts[2];
+  } else {
+    // Format: MM/DD/YYYY or MM/DD
+    const slashMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/);
+    if (slashMatch) {
+      month = parseInt(slashMatch[1], 10) - 1;
+      day = parseInt(slashMatch[2], 10);
+      if (slashMatch[3]) {
+        year = slashMatch[3].length === 2 ? 2000 + parseInt(slashMatch[3], 10) : parseInt(slashMatch[3], 10);
+      }
+    } else {
+      // Format: "Wednesday, Oct 24", "October 14th", "Oct 12", "Friday | 2 Oct"
+      const regex = /(?:[A-Za-z]+[,\s|]+)?([A-Za-z]+)\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?/i;
+      const reverseRegex = /(?:[A-Za-z]+[,\s|]+)?(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]+)(?:,?\s+(\d{4}))?/i;
+      
+      const match = trimmed.match(regex);
+      const revMatch = trimmed.match(reverseRegex);
+
+      if (match && match[1].toLowerCase() in MONTH_MAP) {
+        month = MONTH_MAP[match[1].toLowerCase()];
+        day = parseInt(match[2], 10);
+        if (match[3]) year = parseInt(match[3], 10);
+      } else if (revMatch && revMatch[2].toLowerCase() in MONTH_MAP) {
+        month = MONTH_MAP[revMatch[2].toLowerCase()];
+        day = parseInt(revMatch[1], 10);
+        if (revMatch[3]) year = parseInt(revMatch[3], 10);
+      }
+    }
+  }
+
+  if (month === -1 || day === -1) {
+    return fallbackIso || new Date().toISOString();
+  }
+
+  // Parse start time (default 19:00 = 7:00 PM Eastern)
+  let hours = 19;
+  let minutes = 0;
+  if (timeStr) {
+    const timeMatch = timeStr.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
+    if (timeMatch) {
+      let h = parseInt(timeMatch[1], 10);
+      const m = timeMatch[2] ? parseInt(timeMatch[2], 10) : 0;
+      const ampm = (timeMatch[3] || "").toLowerCase();
+      if (ampm === "pm" && h < 12) h += 12;
+      if (ampm === "am" && h === 12) h = 0;
+      hours = h;
+      minutes = m;
+    }
+  }
+
+  // EDT is UTC-4
+  const utcDate = new Date(Date.UTC(year, month, day, hours + 4, minutes, 0));
+  return !isNaN(utcDate.getTime()) ? utcDate.toISOString() : (fallbackIso || new Date().toISOString());
+}
+
+let hasEnsuredEventColumns = false;
+async function ensureEventColumns(database: any) {
+  if (hasEnsuredEventColumns || !database) return;
   try {
-    await database.query("ALTER TABLE events ADD COLUMN IF NOT EXISTS has_free_food BOOLEAN DEFAULT FALSE;");
-    hasEnsuredFreeFoodColumn = true;
+    await database.query(`
+      ALTER TABLE events ADD COLUMN IF NOT EXISTS has_free_food BOOLEAN DEFAULT FALSE;
+      ALTER TABLE events ADD COLUMN IF NOT EXISTS raw_date VARCHAR(100);
+      ALTER TABLE events ADD COLUMN IF NOT EXISTS raw_time VARCHAR(100);
+    `);
+    hasEnsuredEventColumns = true;
   } catch {
-    // ignore if already exists or permission
+    // ignore
   }
 }
 
@@ -220,7 +301,7 @@ export async function getEvents(options: { currentSemesterOnly?: boolean } = { c
   }
 
   try {
-    await ensureFreeFoodColumn(db);
+    await ensureEventColumns(db);
 
     const query = filterSemester
       ? `
@@ -242,6 +323,8 @@ export async function getEvents(options: { currentSemesterOnly?: boolean } = { c
           e.flyer_details,
           e.description,
           e.has_free_food,
+          e.raw_date,
+          e.raw_time,
           e.created_at
         FROM events e
         LEFT JOIN clubs c ON e.club_id = c.id
@@ -267,6 +350,8 @@ export async function getEvents(options: { currentSemesterOnly?: boolean } = { c
           e.flyer_details,
           e.description,
           e.has_free_food,
+          e.raw_date,
+          e.raw_time,
           e.created_at
         FROM events e
         LEFT JOIN clubs c ON e.club_id = c.id
@@ -284,8 +369,8 @@ export async function getEvents(options: { currentSemesterOnly?: boolean } = { c
       instagram_post_id: row.instagram_post_id,
       post_url: row.post_url || (row.instagram_post_id ? `https://www.instagram.com/p/${row.instagram_post_id}` : "https://www.instagram.com/rutgersu"),
       title: row.title,
-      date: row.event_time ? new Date(row.event_time).toLocaleDateString() : "",
-      time: row.event_time ? new Date(row.event_time).toLocaleTimeString() : "",
+      date: row.raw_date || (row.event_time ? new Date(row.event_time).toLocaleDateString() : ""),
+      time: row.raw_time || (row.event_time ? new Date(row.event_time).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : ""),
       location: row.location || "Rutgers University",
       campus: row.campus || "College Ave",
       category: row.category || row.club_category || "Social & Student Life",
@@ -516,12 +601,7 @@ export async function processAndStoreBrightData(
             new Set([...(extracted.important_links || []), postUrl].filter(Boolean))
           );
 
-          let eventTimeStr = post.datetime || new Date().toISOString();
-          try {
-            eventTimeStr = new Date(eventTimeStr).toISOString();
-          } catch {
-            eventTimeStr = new Date().toISOString();
-          }
+          let eventTimeStr = computeEventTimestamp(extracted.date, extracted.time, post.datetime);
 
           const isVideo =
             Boolean(post.video_url || post.video_play_url || extracted.video_url) ||
@@ -562,18 +642,19 @@ export async function processAndStoreBrightData(
           // If connected to Neon Postgres, persist complete multimodal attributes
           if (db && club && club.id) {
             try {
-              await ensureFreeFoodColumn(db);
+              await ensureEventColumns(db);
               await db.query(
                 `INSERT INTO events (
                   club_id, instagram_post_id, post_url, title, event_time, location,
-                  description, campus, category, image_url, video_url, flyer_details, extraction_source, has_free_food
+                  description, campus, category, image_url, video_url, flyer_details, extraction_source, has_free_food,
+                  raw_date, raw_time
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
                 ON CONFLICT (instagram_post_id) DO UPDATE SET
                   club_id = EXCLUDED.club_id,
                   post_url = EXCLUDED.post_url,
                   title = EXCLUDED.title,
-                  event_time = COALESCE(EXCLUDED.event_time, events.event_time),
+                  event_time = EXCLUDED.event_time,
                   location = COALESCE(EXCLUDED.location, events.location),
                   description = EXCLUDED.description,
                   campus = COALESCE(EXCLUDED.campus, events.campus),
@@ -582,7 +663,9 @@ export async function processAndStoreBrightData(
                   video_url = COALESCE(EXCLUDED.video_url, events.video_url),
                   flyer_details = COALESCE(EXCLUDED.flyer_details, events.flyer_details),
                   extraction_source = COALESCE(EXCLUDED.extraction_source, events.extraction_source),
-                  has_free_food = COALESCE(EXCLUDED.has_free_food, events.has_free_food)`,
+                  has_free_food = COALESCE(EXCLUDED.has_free_food, events.has_free_food),
+                  raw_date = EXCLUDED.raw_date,
+                  raw_time = EXCLUDED.raw_time`,
                 [
                   club.id,
                   postId,
@@ -596,8 +679,10 @@ export async function processAndStoreBrightData(
                   post.image_url || extracted.image_url || null,
                   videoUrl || null,
                   extracted.flyer_details || null,
-                  extracted.extraction_source || "gemini_multimodal",
+                  extracted.extraction_source || "gemini",
                   Boolean(extracted.has_free_food),
+                  extracted.date || null,
+                  extracted.time || null,
                 ]
               );
             } catch (err) {

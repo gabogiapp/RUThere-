@@ -502,7 +502,15 @@ Free Food Detection:
 - If the post or flyer mentions or promises free food, pizza, snacks, refreshments, boba, drinks, dinner, lunch, catered food, treats, or "food provided", and you are confident free food/refreshments are available, set "has_free_food": true.
 - If no free food or refreshments are offered, set "has_free_food": false.
 
-If the post is NOT announcing an upcoming event, meeting, or activity, set "is_event": false.`;
+Event Verification & Strict Negative Filtering:
+- "is_event" MUST be true ONLY IF the post or flyer announces an upcoming real-world or virtual event, meeting, workshop, session, or social gathering where students can attend on a specific date or time.
+- "is_event" MUST be false for ANY of the following:
+  1. Executive Board (E-Board) introductions, officer spotlights, or member welcomes (e.g. "Meet our President", "Meet the Board", "E-Board Spotlight").
+  2. Past event recaps, banquet photo dumps, or post-event appreciation posts (e.g. "Recap from last week", "Thank you to everyone who came out", "Banquet recap", "Photo dump").
+  3. General promotional posts, memes, Spotify playlists, podcast announcements, merchandise drops.
+  4. General application deadlines or Google Form links that do NOT have a live in-person or virtual gathering.
+  5. Any post where NO upcoming event, meeting, or gathering date is identified.
+- When "is_event" is false: set title = "", date = "", time = "", location = "".`;
 }
 
 /**
@@ -529,19 +537,41 @@ export async function extractEventWithGemini(
 
   // If no caption and no image, return empty non-event
   if ((!caption || !caption.trim()) && !options?.imageUrl && !options?.videoUrl) {
-    const fb = fallbackExtractor("", clubInfo);
-    return { ...fb, post_url: options?.postUrl, image_url: options?.imageUrl, video_url: options?.videoUrl, extraction_source: "heuristic" };
-  }
-
-  if (!hasKeys) {
-    console.warn("[GeminiExtractor] No GEMINI_API_KEY found, using heuristic parser.");
-    const fb = fallbackExtractor(caption, clubInfo);
     return {
-      ...fb,
+      is_event: false,
+      title: "",
+      date: "",
+      time: "",
+      location: "",
+      campus: "College Ave",
+      category: options?.clubCategory || "Social & Student Life",
+      important_links: options?.postUrl ? [options.postUrl] : [],
       post_url: options?.postUrl,
       image_url: options?.imageUrl,
       video_url: options?.videoUrl,
-      extraction_source: "heuristic",
+      flyer_details: "",
+      has_free_food: false,
+      extraction_source: "gemini",
+    };
+  }
+
+  if (!hasKeys) {
+    console.warn("[GeminiExtractor] No GEMINI_API_KEY found, returning non-event.");
+    return {
+      is_event: false,
+      title: "",
+      date: "",
+      time: "",
+      location: "",
+      campus: "College Ave",
+      category: options?.clubCategory || "Social & Student Life",
+      important_links: options?.postUrl ? [options.postUrl] : [],
+      post_url: options?.postUrl,
+      image_url: options?.imageUrl,
+      video_url: options?.videoUrl,
+      flyer_details: "",
+      has_free_food: false,
+      extraction_source: "gemini",
     };
   }
 
@@ -592,12 +622,21 @@ export async function extractEventWithGemini(
     if (!res.ok) {
       const errText = await res.text();
       console.warn(`[GeminiExtractor] Gemini API error (${res.status}): ${errText}`);
-      const fb = fallbackExtractor(caption, clubInfo);
       return {
-        ...fb,
+        is_event: false,
+        title: "",
+        date: "",
+        time: "",
+        location: "",
+        campus: "College Ave",
+        category: options?.clubCategory || "Social & Student Life",
+        important_links: options?.postUrl ? [options.postUrl] : [],
         post_url: options?.postUrl,
         image_url: options?.imageUrl,
-        extraction_source: "heuristic",
+        video_url: options?.videoUrl,
+        flyer_details: "",
+        has_free_food: false,
+        extraction_source: "gemini",
       };
     }
 
@@ -605,13 +644,21 @@ export async function extractEventWithGemini(
     const candidateText = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!candidateText) {
-      const fb = fallbackExtractor(caption, clubInfo);
       return {
-        ...fb,
+        is_event: false,
+        title: "",
+        date: "",
+        time: "",
+        location: "",
+        campus: "College Ave",
+        category: options?.clubCategory || "Social & Student Life",
+        important_links: options?.postUrl ? [options.postUrl] : [],
         post_url: options?.postUrl,
         image_url: options?.imageUrl,
         video_url: options?.videoUrl,
-        extraction_source: "heuristic",
+        flyer_details: "",
+        has_free_food: false,
+        extraction_source: "gemini",
       };
     }
 
@@ -633,17 +680,26 @@ export async function extractEventWithGemini(
       image_url: options?.imageUrl || parsed.image_url,
       video_url: options?.videoUrl || parsed.video_url,
       flyer_details: parsed.flyer_details || "",
+      has_free_food: Boolean(parsed.has_free_food),
       extraction_source: "gemini",
     };
   } catch (error) {
     console.error("[GeminiExtractor] Error calling Gemini API:", error);
-    const fb = fallbackExtractor(caption, clubInfo);
     return {
-      ...fb,
+      is_event: false,
+      title: "",
+      date: "",
+      time: "",
+      location: "",
+      campus: "College Ave",
+      category: options?.clubCategory || "Social & Student Life",
+      important_links: options?.postUrl ? [options.postUrl] : [],
       post_url: options?.postUrl,
       image_url: options?.imageUrl,
       video_url: options?.videoUrl,
-      extraction_source: "heuristic",
+      flyer_details: "",
+      has_free_food: false,
+      extraction_source: "gemini",
     };
   }
 }
@@ -698,18 +754,22 @@ export async function extractEventsBatchWithGemini(
       });
       resultMap.set(post.post_id, result);
     } catch (err) {
-      console.warn(`[GeminiExtractor] Extraction failed for post ${post.post_id}, using heuristic:`, err);
-      const fb = fallbackExtractor(post.caption, {
-        name: post.club_name,
-        handle: post.club_handle,
-        category: post.club_category,
-      });
+      console.warn(`[GeminiExtractor] Extraction failed for post ${post.post_id}:`, err);
       resultMap.set(post.post_id, {
-        ...fb,
+        is_event: false,
+        title: "",
+        date: "",
+        time: "",
+        location: "",
+        campus: "College Ave",
+        category: post.club_category || "Social & Student Life",
+        important_links: post.post_url ? [post.post_url] : [],
         post_url: post.post_url,
         image_url: post.image_url,
         video_url: post.video_url,
-        extraction_source: "heuristic",
+        flyer_details: "",
+        has_free_food: false,
+        extraction_source: "gemini",
       });
     }
   }
