@@ -335,9 +335,11 @@ Examples:
     const progress = Math.round((completed / clubs.length) * 100);
     process.stdout.write(`   Batch [${batchCount}/${batches.length}] (${progress}%) Processed ${completed}/${clubs.length} clubs\r`);
 
-    // Pacer: space requests by 4.3s to strictly respect the 14 RPM limit on Google AI Studio
+    // Pacer: space requests according to GEMINI_RPM (4.3s for 14 RPM free tier, ~100ms for paid tier)
     if (batchCount < batches.length && apiKey) {
-      await new Promise((r) => setTimeout(r, 4300));
+      const rpm = parseInt(process.env.GEMINI_RPM || "14", 10);
+      const delayMs = rpm > 50 ? 100 : 4300;
+      await new Promise((r) => setTimeout(r, delayMs));
     }
   }
 

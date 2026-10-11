@@ -13,19 +13,38 @@ export async function POST(req: NextRequest) {
 async function handleCronTrigger(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const targetHandle = searchParams.get("handle")?.replace(/^@/, "").trim().toLowerCase();
+    const handleParam = searchParams.get("handles") || searchParams.get("handle");
+    const targetHandles = handleParam
+      ? Array.from(
+          new Set(
+            handleParam
+              .split(",")
+              .map((h) => h.replace(/^@/, "").trim().toLowerCase())
+              .filter(Boolean)
+          )
+        )
+      : [];
     const limitParam = searchParams.get("limit");
     const limit = limitParam ? parseInt(limitParam, 10) : undefined;
 
     let clubs = await getClubs();
 
-    // If specific handle requested, filter strictly to that handle
-    if (targetHandle) {
-      clubs = clubs.filter((c) => c.handle.toLowerCase() === targetHandle);
-      if (clubs.length === 0) {
-        // If not yet in DB, allow triggering directly with the handle URL
-        clubs = [{ handle: targetHandle, name: targetHandle, url: `https://www.instagram.com/${targetHandle}` }];
-      }
+    // If specific handle(s) requested, filter or synthesize clubs for them
+    if (targetHandles.length > 0) {
+      const handleSet = new Set(targetHandles);
+      const matchedClubs = clubs.filter((c) => handleSet.has(c.handle.toLowerCase()));
+      const matchedHandleSet = new Set(matchedClubs.map((c) => c.handle.toLowerCase()));
+
+      // If any requested handles are not yet in DB, allow triggering directly with their Instagram URLs
+      const syntheticClubs = targetHandles
+        .filter((h) => !matchedHandleSet.has(h))
+        .map((h) => ({
+          handle: h,
+          name: h,
+          url: `https://www.instagram.com/${h}`,
+        }));
+
+      clubs = [...matchedClubs, ...syntheticClubs];
     } else if (limit && limit > 0) {
       clubs = clubs.slice(0, limit);
     }

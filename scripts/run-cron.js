@@ -16,7 +16,8 @@
  * - Resume capability (--resume-from=10) to continue from interrupted runs without re-scraping
  *
  * Usage:
- *   node scripts/run-cron.js [--max-posts=10] [--limit=5] [--handle=rutgers_ai]
+ *   node scripts/run-cron.js [--max-posts=10] [--limit=5]
+ *   node scripts/run-cron.js --handles=ru_calisthenics,rutgers_usacs,rutgers_ieee [--max-posts=10]
  *   node scripts/run-cron.js --resume-from=10 [--max-posts=10] [--force]
  *   node scripts/run-cron.js --snapshot=<snapshot_id>
  */
@@ -147,8 +148,27 @@ async function main() {
   const limitArg = args.find((a) => a.startsWith("--limit="));
   const limit = limitArg ? limitArg.split("=")[1] : undefined;
 
-  const handleArg = args.find((a) => a.startsWith("--handle="));
-  const handle = handleArg ? handleArg.split("=")[1].replace(/^@/, "") : undefined;
+  const handleValues = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a.startsWith("--handle=") || a.startsWith("--handles=")) {
+      handleValues.push(a.split("=")[1]);
+    } else if (a === "--handle" || a === "--handles") {
+      if (args[i + 1] && !args[i + 1].startsWith("--")) {
+        handleValues.push(args[i + 1]);
+        i++;
+      }
+    }
+  }
+
+  const handles = Array.from(
+    new Set(
+      handleValues
+        .flatMap((val) => val.split(","))
+        .map((h) => h.replace(/^@/, "").trim().toLowerCase())
+        .filter(Boolean)
+    )
+  );
 
   const snapshotArg = args.find((a) => a.startsWith("--snapshot="));
   const directSnapshotId = snapshotArg ? snapshotArg.split("=")[1] : undefined;
@@ -161,6 +181,10 @@ async function main() {
   console.log("\n========================================================");
   console.log("     RUThere Cron Scrape & Event Ingestion Pipeline     ");
   console.log(`     Max Posts Per Account: ${maxPosts}                `);
+  if (handles.length > 0) {
+    console.log(`     Target Clubs (${handles.length}): ${handles.map((h) => `@${h}`).join(", ")}`);
+  }
+  if (limit) console.log(`     Club Limit: ${limit}`);
   if (resumeFromBatch) console.log(`     Resume From Batch: ${resumeFromBatch}                 `);
   if (force) console.log("     Force Refresh: YES (re-evaluating all posts)       ");
   console.log("========================================================\n");
@@ -220,7 +244,7 @@ async function main() {
     // Case C: Trigger a new scrape across clubs via /api/cron/trigger-scrape
     let triggerUrl = `${BASE_URL}/api/cron/trigger-scrape?max_posts=${maxPosts}`;
     if (limit) triggerUrl += `&limit=${limit}`;
-    if (handle) triggerUrl += `&handle=${encodeURIComponent(handle)}`;
+    if (handles.length > 0) triggerUrl += `&handles=${encodeURIComponent(handles.join(","))}`;
     if (force) triggerUrl += `&force=true`;
 
     console.log(`🚀 Triggering scrape cron job: ${triggerUrl}...`);
