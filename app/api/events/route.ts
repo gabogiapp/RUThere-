@@ -7,7 +7,8 @@ export async function GET(req: NextRequest) {
     const query = searchParams.get("q")?.toLowerCase();
     const club = searchParams.get("club")?.toLowerCase();
 
-    let events = await getEvents();
+    const includeAll = searchParams.get("all") === "true";
+    let events = await getEvents({ currentSemesterOnly: !includeAll });
 
     if (club) {
       events = events.filter((e) => e.club_handle.toLowerCase() === club);
