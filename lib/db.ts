@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import { Pool } from "pg";
 import { ClubRecord, EventRecord, BrightDataProfileRecord } from "./types";
-import { extractEventsBatchWithGemini, extractClubInterestsWithGemini } from "./geminiExtractor";
+import { extractEventsBatchWithGemini, extractClubInterestsWithGemini, ClubTaxonomyResult } from "./geminiExtractor";
 
 let pool: Pool | null = null;
 
@@ -358,13 +358,40 @@ export async function processAndStoreBrightData(
     const handle = rec.account || (rec.url ? rec.url.split("/").filter(Boolean).pop() : "");
     if (!handle) continue;
 
-    const captions = (rec.posts || []).map((p) => p.caption || "").filter(Boolean);
-    const taxonomy = await extractClubInterestsWithGemini({
-      name: rec.full_name || handle,
-      handle,
-      biography: rec.biography,
-      captions,
-    });
+    const cleanHandle = handle.replace(/^@/, "").trim().toLowerCase();
+
+    // Optimization: Check if club already exists in DB with populated interests to avoid burning Gemini API calls
+    let taxonomy: ClubTaxonomyResult | null = null;
+    if (db) {
+      try {
+        const existingRes = await db.query(
+          "SELECT interests, related_interests FROM clubs WHERE LOWER(handle) = $1",
+          [cleanHandle]
+        );
+        if (
+          existingRes.rows.length > 0 &&
+          Array.isArray(existingRes.rows[0].interests) &&
+          existingRes.rows[0].interests.length > 0
+        ) {
+          taxonomy = {
+            primary: existingRes.rows[0].interests,
+            related: existingRes.rows[0].related_interests || [],
+          };
+        }
+      } catch (err) {
+        console.warn(`[processAndStoreBrightData] Error checking cached interests for ${handle}:`, err);
+      }
+    }
+
+    if (!taxonomy) {
+      const captions = (rec.posts || []).map((p) => p.caption || "").filter(Boolean);
+      taxonomy = await extractClubInterestsWithGemini({
+        name: rec.full_name || handle,
+        handle,
+        biography: rec.biography,
+        captions,
+      });
+    }
 
     const club = await upsertClub({
       handle,

@@ -182,7 +182,7 @@ async function main() {
 
     if (isReady) {
       const records = await downloadSnapshot(snapId);
-      await sendToWebhook(records, maxPosts);
+      await sendToWebhook(records, maxPosts, force);
     }
   }
 

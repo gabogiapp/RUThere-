@@ -3,8 +3,133 @@ import path from "path";
 import { ExtractedEventSchema } from "./types";
 import { extractEventDetails as fallbackExtractor } from "./eventExtractor";
 
-const GEMINI_MODEL = "gemini-3.5-flash-lite";
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
+
+/**
+ * Sliding window + minimum spacing rate limiter for Google Gemini API.
+ * Default: 14 RPM (strictly beneath Google AI Studio's 15 RPM free tier cap).
+ * Configurable via GEMINI_RPM environment variable (e.g. 500-1000 for Pay-As-You-Go).
+ */
+export class GeminiRateLimiter {
+  private queue: Array<() => void> = [];
+  private requestTimestamps: number[] = [];
+  private processing = false;
+
+  public get rpm(): number {
+    const val = parseInt(process.env.GEMINI_RPM || "14", 10);
+    return isNaN(val) || val <= 0 ? 14 : val;
+  }
+
+  public async acquire(): Promise<void> {
+    return new Promise<void>((resolve) => {
+      this.queue.push(resolve);
+      this.scheduleNext();
+    });
+  }
+
+  private scheduleNext() {
+    if (this.processing || this.queue.length === 0) return;
+    this.processing = true;
+
+    const now = Date.now();
+    const currentRpm = this.rpm;
+    const windowMs = 60000;
+    const minSpacingMs = Math.ceil(windowMs / currentRpm);
+
+    // Evict timestamps older than 60 seconds
+    this.requestTimestamps = this.requestTimestamps.filter((t) => now - t < windowMs);
+
+    const lastRequest = this.requestTimestamps.length > 0
+      ? this.requestTimestamps[this.requestTimestamps.length - 1]
+      : 0;
+    const timeSinceLast = now - lastRequest;
+
+    let delayMs = 0;
+
+    // Check 1: Minimum inter-request spacing to prevent burst 429 errors
+    if (timeSinceLast < minSpacingMs) {
+      delayMs = Math.max(delayMs, minSpacingMs - timeSinceLast);
+    }
+
+    // Check 2: Rolling 60-second window capacity
+    if (this.requestTimestamps.length >= currentRpm) {
+      const oldestInWindow = this.requestTimestamps[0];
+      const waitToSlide = windowMs - (now - oldestInWindow) + 150;
+      delayMs = Math.max(delayMs, waitToSlide);
+    }
+
+    if (delayMs > 0) {
+      setTimeout(() => {
+        this.processing = false;
+        this.scheduleNext();
+      }, delayMs);
+    } else {
+      this.requestTimestamps.push(Date.now());
+      const nextResolve = this.queue.shift();
+      this.processing = false;
+      if (nextResolve) nextResolve();
+
+      if (this.queue.length > 0) {
+        setTimeout(() => this.scheduleNext(), minSpacingMs);
+      }
+    }
+  }
+}
+
+export const geminiLimiter = new GeminiRateLimiter();
+
+/**
+ * Fetch wrapper for Gemini API with rate limiting and exponential backoff on HTTP 429 / 503
+ */
+export async function fetchGeminiWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries = 4
+): Promise<Response> {
+  let attempt = 0;
+  while (attempt <= maxRetries) {
+    await geminiLimiter.acquire();
+
+    try {
+      const res = await fetch(url, options);
+
+      if (res.status === 429 || res.status === 503) {
+        attempt++;
+        if (attempt > maxRetries) {
+          console.warn(`[GeminiExtractor] HTTP ${res.status} returned and exhausted all ${maxRetries} retries.`);
+          return res;
+        }
+
+        const retryAfterHeader = res.headers.get("retry-after");
+        let backoffMs: number;
+        if (retryAfterHeader) {
+          const parsedSeconds = parseInt(retryAfterHeader, 10);
+          backoffMs = !isNaN(parsedSeconds) ? parsedSeconds * 1000 : 8000;
+        } else {
+          // Exponential backoff: attempt 1: 5-7s, attempt 2: 12-15s, attempt 3: 25-30s, attempt 4: 50-60s
+          backoffMs = Math.min(60000, Math.pow(2, attempt) * 3500 + Math.random() * 2000);
+        }
+
+        console.warn(
+          `[GeminiExtractor] HTTP ${res.status} (Resource Exhausted / Rate Limit). Retrying in ${(backoffMs / 1000).toFixed(1)}s (attempt ${attempt}/${maxRetries})...`
+        );
+        await new Promise((r) => setTimeout(r, backoffMs));
+        continue;
+      }
+
+      return res;
+    } catch (err: any) {
+      attempt++;
+      if (attempt > maxRetries) throw err;
+      const backoffMs = Math.pow(2, attempt) * 2000;
+      console.warn(`[GeminiExtractor] Network/fetch error (${err.message || err}). Retrying in ${(backoffMs / 1000).toFixed(1)}s...`);
+      await new Promise((r) => setTimeout(r, backoffMs));
+    }
+  }
+
+  throw new Error(`[GeminiExtractor] Exhausted all ${maxRetries} retries`);
+}
 
 export interface PostExtractionInput {
   post_id: string;
@@ -260,11 +385,11 @@ export async function extractEventWithGemini(
   };
 
   try {
-    const res = await fetch(endpoint, {
+    const res = await fetchGeminiWithRetry(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(20000),
     });
 
     if (!res.ok) {
@@ -439,13 +564,14 @@ Respond ONLY with a valid JSON object in this exact shape:
 }
 No markdown backticks.`;
 
-    const res = await fetch(`${GEMINI_BASE_URL}/models/${GEMINI_MODEL}:generateContent?key=${key}`, {
+    const res = await fetchGeminiWithRetry(`${GEMINI_BASE_URL}/models/${GEMINI_MODEL}:generateContent?key=${key}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: { temperature: 0.2, maxOutputTokens: 350 },
       }),
+      signal: AbortSignal.timeout(20000),
     });
 
     if (res.ok) {
