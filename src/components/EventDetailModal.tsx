@@ -17,6 +17,8 @@ import {
   Copy,
   Check,
   Users,
+  Instagram,
+  Sparkles,
 } from 'lucide-react';
 
 export const EventDetailModal: React.FC = () => {
@@ -81,6 +83,18 @@ export const EventDetailModal: React.FC = () => {
                 </span>
               );
             })()}
+            {selectedEvent.post_url && (
+              <a
+                href={selectedEvent.post_url}
+                target="_blank"
+                rel="noreferrer"
+                title="View original Instagram post"
+                className="inline-flex items-center gap-1 rounded-md border border-[#E1306C]/30 bg-[#E1306C]/10 px-2 py-0.5 text-[11px] font-semibold text-[#E1306C] hover:bg-[#E1306C]/20 transition-colors shadow-2xs"
+              >
+                <Instagram size={11} />
+                <span>Instagram</span>
+              </a>
+            )}
           </div>
 
           <button
@@ -159,6 +173,47 @@ export const EventDetailModal: React.FC = () => {
           </div>
         </div>
 
+        {/* Scraped Flyer Image */}
+        {selectedEvent.image_url && (
+          <div className="mt-4 overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-secondary)] shadow-inner">
+            <div className="relative group">
+              <img
+                src={selectedEvent.image_url}
+                alt={selectedEvent.title}
+                className="w-full max-h-52 object-cover object-center transition-transform duration-300 group-hover:scale-102"
+                loading="lazy"
+                onError={(e) => {
+                  (e.target as HTMLElement).parentElement?.parentElement?.classList.add('hidden');
+                }}
+              />
+              {selectedEvent.post_url && (
+                <a
+                  href={selectedEvent.post_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="absolute bottom-2 right-2 flex items-center gap-1.5 rounded-lg bg-black/75 backdrop-blur-xs px-2.5 py-1 text-[11px] font-medium text-white hover:bg-black/90 transition-colors shadow-xs"
+                >
+                  <Instagram size={12} className="text-[#E1306C]" />
+                  <span>View Post</span>
+                </a>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Gemini Vision Extracted Flyer Details */}
+        {selectedEvent.flyer_details && (
+          <div className="mt-3.5 rounded-xl border border-purple-500/20 bg-purple-500/5 p-3 text-[12px] text-[var(--text-secondary)] shadow-2xs">
+            <div className="flex items-center gap-1.5 font-semibold text-purple-600 dark:text-purple-400">
+              <Sparkles size={13} />
+              <span>Extracted from Flyer Graphic</span>
+            </div>
+            <p className="mt-1 leading-relaxed text-[var(--text-primary)]">
+              {selectedEvent.flyer_details}
+            </p>
+          </div>
+        )}
+
         {/* Description */}
         {selectedEvent.description && (
           <div className="mt-4">
@@ -202,16 +257,30 @@ export const EventDetailModal: React.FC = () => {
           </div>
         )}
 
-        {/* Action Buttons row (Share, ICS, GCal) */}
+        {/* Action Buttons row (Share, Origin Post, ICS, GCal) */}
         <div className="mt-6 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border-color)] pt-4">
-          <button
-            type="button"
-            onClick={handleShare}
-            className="flex h-9 items-center gap-1.5 rounded-lg bg-[var(--bg-secondary)] px-3 text-[12px] font-medium text-[var(--text-secondary)] hover:bg-[var(--border-color)] transition-colors"
-          >
-            {copiedLink ? <Check size={14} className="text-emerald-500" /> : <Share2 size={14} />}
-            <span>{copiedLink ? 'Copied' : 'Share'}</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleShare}
+              className="flex h-9 items-center gap-1.5 rounded-lg bg-[var(--bg-secondary)] px-3 text-[12px] font-medium text-[var(--text-secondary)] hover:bg-[var(--border-color)] transition-colors"
+            >
+              {copiedLink ? <Check size={14} className="text-emerald-500" /> : <Share2 size={14} />}
+              <span>{copiedLink ? 'Copied' : 'Share'}</span>
+            </button>
+
+            {selectedEvent.post_url && (
+              <a
+                href={selectedEvent.post_url}
+                target="_blank"
+                rel="noreferrer"
+                className="flex h-9 items-center gap-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] px-3 text-[12px] font-medium text-[var(--text-primary)] hover:border-[#E1306C] hover:text-[#E1306C] transition-colors"
+              >
+                <Instagram size={14} className="text-[#E1306C]" />
+                <span>Origin Post</span>
+              </a>
+            )}
+          </div>
 
           <div className="flex items-center gap-2">
             <button

@@ -42,7 +42,7 @@ export interface EventRecord {
   club_handle: string;
   club_name: string;
   instagram_post_id?: string;
-  post_url?: string;
+  post_url: string;
   title: string;
   date?: string;
   time?: string;
@@ -55,4 +55,25 @@ export interface EventRecord {
   color_scheme?: string;
   is_event: boolean;
   created_at?: string;
+  image_url?: string;
+  flyer_details?: string;
+  extraction_source?: "gemini" | "heuristic";
 }
+
+export interface ExtractedEventSchema {
+  is_event: boolean;
+  title: string;
+  date: string;
+  time: string;
+  location: string;
+  campus: string;
+  category: string;
+  important_links: string[];
+  post_url?: string;
+  image_url?: string;
+  flyer_details?: string;
+}
+
+export type Club = ClubRecord;
+export type ClubEvent = EventRecord;
+export type BrightDataInstagramPost = BrightDataPostRecord;

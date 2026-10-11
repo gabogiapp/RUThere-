@@ -340,6 +340,10 @@ export function enrichEvent(item: BackendEventItem, idx: number): CalendarEvent 
   const rawCampus = item.campus || 'College Ave';
   const campus = (rawCampus === 'Cook/Douglass' ? 'Cook/Doug' : rawCampus) as RutgersCampus;
 
+  const links = Array.from(
+    new Set([...(item.important_links || []), item.post_url].filter(Boolean))
+  ) as string[];
+
   return {
     ...item,
     id: item.id || `event-${idx}-${Date.now().toString(36)}`,
@@ -347,6 +351,10 @@ export function enrichEvent(item: BackendEventItem, idx: number): CalendarEvent 
     club_handle: item.club_handle || '@rutgersclubs',
     category,
     campus,
+    post_url: item.post_url,
+    image_url: item.image_url,
+    flyer_details: item.flyer_details,
+    important_links: links,
     color_scheme: color,
     parsedDate,
     startMinutes: timeInfo.startMinutes,

@@ -144,8 +144,20 @@ export const AgendaView: React.FC = () => {
                             )}
 
                             {/* Important links preview */}
-                            {event.important_links.length > 0 && (
+                            {(event.important_links.length > 0 || event.post_url) && (
                               <div className="flex flex-wrap items-center gap-2 pt-2">
+                                {event.post_url && !event.important_links.includes(event.post_url) && (
+                                  <a
+                                    href={event.post_url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="inline-flex items-center gap-1 rounded-md bg-[#E1306C]/10 px-2.5 py-1 text-[11px] font-semibold text-[#E1306C] hover:bg-[#E1306C]/20 transition-colors"
+                                  >
+                                    <ArrowUpRight size={12} />
+                                    <span>Instagram Post</span>
+                                  </a>
+                                )}
                                 {event.important_links.map((link, idx) => (
                                   <a
                                     key={idx}
@@ -153,7 +165,11 @@ export const AgendaView: React.FC = () => {
                                     target="_blank"
                                     rel="noreferrer"
                                     onClick={(e) => e.stopPropagation()}
-                                    className="inline-flex items-center gap-1 rounded-md bg-[var(--bg-tertiary)] px-2.5 py-1 text-[11px] font-medium text-[#cc0033] hover:bg-[#cc0033]/10 transition-colors"
+                                    className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                                      link.includes('instagram')
+                                        ? 'bg-[#E1306C]/10 text-[#E1306C] hover:bg-[#E1306C]/20 font-semibold'
+                                        : 'bg-[var(--bg-tertiary)] text-[#cc0033] hover:bg-[#cc0033]/10'
+                                    }`}
                                   >
                                     <ArrowUpRight size={12} />
                                     <span>
@@ -162,7 +178,7 @@ export const AgendaView: React.FC = () => {
                                         : link.includes('discord')
                                         ? 'Discord'
                                         : link.includes('instagram')
-                                        ? 'Instagram'
+                                        ? 'Instagram Post'
                                         : 'Link'}
                                     </span>
                                   </a>

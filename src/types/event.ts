@@ -14,6 +14,10 @@ export interface BackendEventItem {
   campus?: RutgersCampus;
   description?: string;
   color_scheme?: ColorVariant;
+  post_url?: string;
+  image_url?: string;
+  flyer_details?: string;
+  extraction_source?: 'gemini' | 'heuristic';
 }
 
 export type ClubCategory =
