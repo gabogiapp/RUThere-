@@ -1,4 +1,4 @@
-import Fuse, { IFuseOptions } from 'fuse.js';
+import MiniSearch from 'minisearch';
 import { CalendarEvent } from '../types/event';
 import { ClubRecord } from '../../lib/types';
 
@@ -14,39 +14,199 @@ export interface SearchResultItem {
   event?: CalendarEvent;
 }
 
-const clubFuseOptions: IFuseOptions<ClubRecord> = {
-  includeScore: true,
-  threshold: 0.38,
-  ignoreLocation: true,
-  minMatchCharLength: 2,
-  keys: [
-    { name: 'name', weight: 0.35 },
-    { name: 'handle', weight: 0.25 },
-    { name: 'interests', weight: 0.25 },
-    { name: 'related_interests', weight: 0.1 },
-    { name: 'category', weight: 0.05 },
-    { name: 'biography', weight: 0.05 },
-  ],
-};
+interface IndexedDoc {
+  id: string;
+  docType: 'club' | 'event';
+  rawId: string;
+  title: string;
+  handle: string;
+  interests: string;
+  related_interests: string;
+  category: string;
+  location: string;
+  campus: string;
+  description: string;
+  free_food: string;
+  biography: string;
+}
 
-const eventFuseOptions: IFuseOptions<CalendarEvent> = {
-  includeScore: true,
-  threshold: 0.38,
-  ignoreLocation: true,
-  minMatchCharLength: 2,
-  keys: [
-    { name: 'title', weight: 0.4 },
-    { name: 'location', weight: 0.2 },
-    { name: 'club_name', weight: 0.2 },
-    { name: 'club_handle', weight: 0.15 },
-    { name: 'category', weight: 0.1 },
-    { name: 'campus', weight: 0.1 },
-    { name: 'description', weight: 0.1 },
-  ],
-};
+interface CachedIndex {
+  clubsRef: ClubRecord[];
+  eventsRef: CalendarEvent[];
+  miniSearch: MiniSearch<IndexedDoc>;
+  clubById: Map<string, ClubRecord>;
+  clubByHandle: Map<string, ClubRecord>;
+  clubByName: Map<string, ClubRecord>;
+  eventById: Map<string, CalendarEvent>;
+  eventByTitle: Map<string, CalendarEvent>;
+  eventsByClubHandle: Map<string, string[]>;
+}
+
+let cachedIndex: CachedIndex | null = null;
+
+function normalize(str: string): string {
+  return (str || '').toLowerCase().trim();
+}
+
+function cleanHandle(handle: string): string {
+  return normalize(handle).replace(/^@/, '');
+}
+
+/**
+ * Builds or retrieves the cached MiniSearch inverted index and O(1) entity maps.
+ * Rebuilds only when the clubs or events array reference changes.
+ */
+function getOrBuildIndex(clubs: ClubRecord[], events: CalendarEvent[]): CachedIndex {
+  if (
+    cachedIndex &&
+    cachedIndex.clubsRef === clubs &&
+    cachedIndex.eventsRef === events
+  ) {
+    return cachedIndex;
+  }
+
+  const clubById = new Map<string, ClubRecord>();
+  const clubByHandle = new Map<string, ClubRecord>();
+  const clubByName = new Map<string, ClubRecord>();
+  const eventById = new Map<string, CalendarEvent>();
+  const eventByTitle = new Map<string, CalendarEvent>();
+  const eventsByClubHandle = new Map<string, string[]>();
+
+  const docs: IndexedDoc[] = [];
+
+  // Index clubs and populate O(1) lookup maps
+  for (const club of clubs) {
+    const rawId = String(club.id || club.handle);
+    const cHandle = cleanHandle(club.handle);
+    const cName = normalize(club.name);
+
+    clubById.set(rawId, club);
+    if (cHandle) clubByHandle.set(cHandle, club);
+    if (cName) clubByName.set(cName, club);
+
+    docs.push({
+      id: `club:${rawId}`,
+      docType: 'club',
+      rawId,
+      title: club.name || '',
+      handle: cHandle,
+      interests: (club.interests || []).join(' '),
+      related_interests: (club.related_interests || []).join(' '),
+      category: club.category || '',
+      location: '',
+      campus: '',
+      description: club.biography || '',
+      free_food: '',
+      biography: club.biography || '',
+    });
+  }
+
+  // Index events and populate O(1) lookup maps
+  for (const event of events) {
+    eventById.set(event.id, event);
+    const normTitle = normalize(event.title);
+    if (normTitle && !eventByTitle.has(normTitle)) {
+      eventByTitle.set(normTitle, event);
+    }
+
+    const hostHandle = cleanHandle(event.club_handle);
+    const hostName = normalize(event.club_name);
+    const rawClubId = (event as any).club_id;
+    const hostClub =
+      (rawClubId && clubById.get(String(rawClubId))) ||
+      (hostHandle ? clubByHandle.get(hostHandle) : undefined) ||
+      (hostName ? clubByName.get(hostName) : undefined);
+
+    if (hostHandle) {
+      const existing = eventsByClubHandle.get(hostHandle) || [];
+      existing.push(event.id);
+      eventsByClubHandle.set(hostHandle, existing);
+    }
+
+    const hostInterests = hostClub?.interests ? hostClub.interests.join(' ') : '';
+    const hostRelated = hostClub?.related_interests ? hostClub.related_interests.join(' ') : '';
+
+    const freeFoodTokens = event.has_free_food
+      ? 'free food pizza snacks lunch dinner meal drinks beverage catering'
+      : '';
+
+    docs.push({
+      id: `event:${event.id}`,
+      docType: 'event',
+      rawId: event.id,
+      title: event.title || '',
+      handle: hostHandle,
+      interests: hostInterests,
+      related_interests: hostRelated,
+      category: event.category || '',
+      location: event.location || '',
+      campus: event.campus || '',
+      description: `${event.description || ''} ${event.flyer_details || ''}`,
+      free_food: freeFoodTokens,
+      biography: '',
+    });
+  }
+
+  const miniSearch = new MiniSearch<IndexedDoc>({
+    fields: [
+      'title',
+      'handle',
+      'interests',
+      'related_interests',
+      'location',
+      'free_food',
+      'category',
+      'campus',
+      'description',
+      'biography',
+    ],
+    storeFields: ['docType', 'rawId'],
+    searchOptions: {
+      boost: {
+        title: 4.0,
+        handle: 3.0,
+        interests: 2.5,
+        free_food: 2.2,
+        location: 1.8,
+        related_interests: 1.4,
+        category: 1.2,
+        campus: 1.0,
+        description: 0.8,
+        biography: 0.8,
+      },
+      fuzzy: (term) => (term.length > 3 ? 0.45 : false),
+      prefix: true,
+    },
+    tokenize: (text) => (text || '').toLowerCase().split(/[\s,._\-/]+/).filter(Boolean),
+  });
+
+  miniSearch.addAll(docs);
+
+  cachedIndex = {
+    clubsRef: clubs,
+    eventsRef: events,
+    miniSearch,
+    clubById,
+    clubByHandle,
+    clubByName,
+    eventById,
+    eventByTitle,
+    eventsByClubHandle,
+  };
+
+  return cachedIndex;
+}
+
+const FREE_FOOD_TERMS = new Set(['free food', 'freefood', 'food', 'free', 'pizza', 'snacks']);
+
+function isFreeFoodSearch(clean: string): boolean {
+  if (FREE_FOOD_TERMS.has(clean)) return true;
+  return clean.includes('free food') || clean.includes('pizza');
+}
 
 /**
  * Searches clubs and events and returns combined results sorted strictly by best match score.
+ * Employs Tier 1/2 exact/prefix priority boosting + cached MiniSearch Radix inverted index.
  */
 export function getBestMatches(
   query: string,
@@ -54,251 +214,213 @@ export function getBestMatches(
   events: CalendarEvent[],
   limit = 8
 ): SearchResultItem[] {
-  const clean = query.trim().toLowerCase();
+  const clean = normalize(query);
   if (!clean) return [];
 
-  const results: SearchResultItem[] = [];
-
-  // 1. Direct / Exact checks for Clubs
-  const matchedClubIds = new Set<string>();
+  const index = getOrBuildIndex(clubs, events);
   const cleanNoAt = clean.replace(/^@/, '');
+  const results: SearchResultItem[] = [];
+  const matchedClubIds = new Set<string>();
+  const matchedEventIds = new Set<string>();
 
-  for (const club of clubs) {
-    const handleClean = club.handle.toLowerCase().replace(/^@/, '');
-    const nameClean = club.name.toLowerCase();
-    const clubId = String(club.id || club.handle);
-
-    // Exact or prefix name / handle match
-    const isExactName = nameClean === clean;
-    const isExactHandle = handleClean === cleanNoAt;
-    const isPrefixName = nameClean.startsWith(clean);
-    const isPrefixHandle = handleClean.startsWith(cleanNoAt);
-
-    // Check primary focus interests (Tier 1)
-    const matchingPrimaryInterest = (club.interests || []).find((interest) => {
-      const iLower = interest.toLowerCase();
-      return iLower === clean || iLower.includes(clean);
+  // 1. O(1) Exact Matches for Clubs
+  const exactHandleClub = index.clubByHandle.get(cleanNoAt);
+  if (exactHandleClub) {
+    const rawId = String(exactHandleClub.id || exactHandleClub.handle);
+    matchedClubIds.add(rawId);
+    results.push({
+      id: `club-${rawId}`,
+      type: 'club',
+      title: exactHandleClub.name,
+      subtitle: `@${cleanHandle(exactHandleClub.handle)}${exactHandleClub.category ? ` • ${exactHandleClub.category}` : ''}`,
+      detail: exactHandleClub.biography,
+      score: 0.01,
+      club: exactHandleClub,
     });
+  }
 
-    // Check related topics / sub-disciplines (Tier 2)
-    const matchingRelatedInterest = (club.related_interests || []).find((interest) => {
-      const iLower = interest.toLowerCase();
-      return iLower === clean || iLower.includes(clean);
-    });
-
-    if (isExactName || isExactHandle) {
-      matchedClubIds.add(clubId);
+  const exactNameClub = index.clubByName.get(clean);
+  if (exactNameClub) {
+    const rawId = String(exactNameClub.id || exactNameClub.handle);
+    if (!matchedClubIds.has(rawId)) {
+      matchedClubIds.add(rawId);
       results.push({
-        id: `club-${clubId}`,
+        id: `club-${rawId}`,
         type: 'club',
-        title: club.name,
-        subtitle: `@${handleClean}${club.category ? ` • ${club.category}` : ''}`,
-        detail: matchingPrimaryInterest ? `Matches interest: ${matchingPrimaryInterest}` : club.biography,
+        title: exactNameClub.name,
+        subtitle: `@${cleanHandle(exactNameClub.handle)}${exactNameClub.category ? ` • ${exactNameClub.category}` : ''}`,
+        detail: exactNameClub.biography,
         score: 0.01,
-        matchedInterest: matchingPrimaryInterest,
-        club,
-      });
-    } else if (isPrefixName || isPrefixHandle) {
-      matchedClubIds.add(clubId);
-      results.push({
-        id: `club-${clubId}`,
-        type: 'club',
-        title: club.name,
-        subtitle: `@${handleClean}${club.category ? ` • ${club.category}` : ''}`,
-        detail: matchingPrimaryInterest ? `Matches interest: ${matchingPrimaryInterest}` : club.biography,
-        score: 0.05,
-        matchedInterest: matchingPrimaryInterest,
-        club,
-      });
-    } else if (matchingPrimaryInterest) {
-      // Primary focus gets priority ranking
-      matchedClubIds.add(clubId);
-      results.push({
-        id: `club-${clubId}`,
-        type: 'club',
-        title: club.name,
-        subtitle: `@${handleClean}${club.category ? ` • ${club.category}` : ''}`,
-        detail: `Matches interest: ${matchingPrimaryInterest}`,
-        score: 0.08,
-        matchedInterest: matchingPrimaryInterest,
-        club,
-      });
-    } else if (matchingRelatedInterest) {
-      // Related topic gets secondary ranking
-      matchedClubIds.add(clubId);
-      results.push({
-        id: `club-${clubId}`,
-        type: 'club',
-        title: club.name,
-        subtitle: `@${handleClean}${club.category ? ` • ${club.category}` : ''}`,
-        detail: `Related to: ${matchingRelatedInterest}`,
-        score: 0.20,
-        matchedInterest: matchingRelatedInterest,
-        club,
+        club: exactNameClub,
       });
     }
   }
 
-  // 2. Direct / Exact checks for Events
-  const matchedEventIds = new Set<string>();
+  // 2. O(1) Exact Match for Events
+  const exactEvent = index.eventByTitle.get(clean);
+  if (exactEvent) {
+    matchedEventIds.add(exactEvent.id);
+    results.push({
+      id: `event-${exactEvent.id}`,
+      type: 'event',
+      title: exactEvent.title,
+      subtitle: `${exactEvent.date || exactEvent.parsedDate} • ${exactEvent.time} • ${exactEvent.location}`,
+      detail: exactEvent.club_name,
+      score: 0.02,
+      event: exactEvent,
+    });
+  }
 
-  for (const event of events) {
-    const titleClean = event.title.toLowerCase();
-    const isExactTitle = titleClean === clean;
-    const isPrefixTitle = titleClean.startsWith(clean);
-    const hasTitleWord = titleClean.split(/\s+/).includes(clean) || (clean.length >= 3 && titleClean.includes(clean));
-    const hasRoomMatch = event.location.toLowerCase().includes(clean);
+  // 3. MiniSearch Inverted Index Query (Fuzzy + Prefix Typo-Tolerant Match)
+  const isFreeFood = isFreeFoodSearch(clean);
+  const searchResults = index.miniSearch.search(clean, {
+    fuzzy: (term) => (term.length > 3 ? 0.45 : false),
+    prefix: true,
+  });
 
-    if (isExactTitle) {
-      matchedEventIds.add(event.id);
-      results.push({
-        id: `event-${event.id}`,
-        type: 'event',
-        title: event.title,
-        subtitle: `${event.date || event.parsedDate} • ${event.time} • ${event.location}`,
-        detail: event.club_name,
-        score: 0.02,
-        event,
+  // Evaluate top candidates from inverted index (capping candidate pool for sub-millisecond response)
+  const candidates = searchResults.slice(0, 40);
+
+  for (const item of candidates) {
+    const isClub = item.docType === 'club';
+    const rawId = item.rawId;
+
+    if (isClub) {
+      if (matchedClubIds.has(rawId)) continue;
+      const club = index.clubById.get(rawId);
+      if (!club) continue;
+
+      matchedClubIds.add(rawId);
+
+      const handle = cleanHandle(club.handle);
+      const name = normalize(club.name);
+
+      const isPrefixName = name.startsWith(clean);
+      const isPrefixHandle = handle.startsWith(cleanNoAt);
+
+      const matchingPrimaryInterest = (club.interests || []).find((interest) => {
+        const iLower = normalize(interest);
+        return iLower === clean || iLower.includes(clean);
       });
-    } else if (isPrefixTitle) {
-      matchedEventIds.add(event.id);
-      results.push({
-        id: `event-${event.id}`,
-        type: 'event',
-        title: event.title,
-        subtitle: `${event.date || event.parsedDate} • ${event.time} • ${event.location}`,
-        detail: event.club_name,
-        score: 0.06,
-        event,
+
+      const matchingRelatedInterest = (club.related_interests || []).find((interest) => {
+        const iLower = normalize(interest);
+        return iLower === clean || iLower.includes(clean);
       });
-    } else if (hasTitleWord) {
-      matchedEventIds.add(event.id);
+
+      let score: number;
+      if (isPrefixName || isPrefixHandle) {
+        score = 0.05;
+      } else if (matchingPrimaryInterest) {
+        score = 0.08;
+      } else if (matchingRelatedInterest) {
+        score = 0.20;
+      } else {
+        // Map MiniSearch score (higher is better) to lower-is-better score in range [0.22, 0.45]
+        score = Math.max(0.22, Math.min(0.45, 0.45 - item.score / 25));
+      }
+
       results.push({
-        id: `event-${event.id}`,
-        type: 'event',
-        title: event.title,
-        subtitle: `${event.date || event.parsedDate} • ${event.time} • ${event.location}`,
-        detail: event.club_name,
-        score: 0.09,
-        event,
-      });
-    } else if (hasRoomMatch && clean.length >= 3) {
-      matchedEventIds.add(event.id);
-      results.push({
-        id: `event-${event.id}`,
-        type: 'event',
-        title: event.title,
-        subtitle: `${event.date || event.parsedDate} • ${event.time} • ${event.location}`,
-        detail: event.club_name,
-        score: 0.15,
-        event,
+        id: `club-${rawId}`,
+        type: 'club',
+        title: club.name,
+        subtitle: `@${handle}${club.category ? ` • ${club.category}` : ''}`,
+        detail: matchingPrimaryInterest
+          ? `Matches interest: ${matchingPrimaryInterest}`
+          : matchingRelatedInterest
+          ? `Related to: ${matchingRelatedInterest}`
+          : club.biography,
+        score,
+        matchedInterest: matchingPrimaryInterest || matchingRelatedInterest,
+        club,
       });
     } else {
-      const isFreeFoodSearch =
-        clean === 'free food' ||
-        clean.includes('free food') ||
-        clean === 'freefood' ||
-        clean === 'food' ||
-        clean === 'free' ||
-        'free food'.includes(clean) ||
-        clean.includes('pizza');
-      const matchesFreeFood = Boolean(event.has_free_food) && isFreeFoodSearch;
+      if (matchedEventIds.has(rawId)) continue;
+      const event = index.eventById.get(rawId);
+      if (!event) continue;
 
+      matchedEventIds.add(rawId);
+
+      const titleClean = normalize(event.title);
+      const isPrefixTitle = titleClean.startsWith(clean);
+      const hasTitleWord = titleClean.split(/\s+/).includes(clean);
+      const matchesFreeFood = Boolean(event.has_free_food) && isFreeFood;
+
+      let score: number;
       if (matchesFreeFood) {
-        matchedEventIds.add(event.id);
-        results.push({
-          id: `event-${event.id}`,
-          type: 'event',
-          title: event.title,
-          subtitle: `${event.date || event.parsedDate} • ${event.time} • ${event.location}`,
-          detail: `🍕 FREE FOOD Included • ${event.club_name}`,
-          score: clean === 'free food' || clean === 'freefood' ? 0.03 : 0.11,
-          event,
-        });
+        score = clean === 'free food' || clean === 'freefood' ? 0.03 : 0.11;
+      } else if (isPrefixTitle) {
+        score = 0.06;
+      } else if (hasTitleWord) {
+        score = 0.09;
       } else {
-        // Check if this event is hosted by a club whose primary focus matches the query
-        const hostClub = clubs.find((c) => {
-          const cName = c.name.toLowerCase();
-          const cHandle = c.handle.toLowerCase().replace(/^@/, '');
-          return (
-            event.club_name.toLowerCase().includes(cName) ||
-            event.club_handle.toLowerCase().replace(/^@/, '') === cHandle
-          );
-        });
+        score = Math.max(0.22, Math.min(0.45, 0.45 - item.score / 25));
+      }
 
-        const hostHasPrimaryInterest = hostClub && (hostClub.interests || []).some((interest) => {
-          const iLower = interest.toLowerCase();
-          return iLower === clean || iLower.includes(clean);
-        });
+      results.push({
+        id: `event-${event.id}`,
+        type: 'event',
+        title: event.title,
+        subtitle: `${event.date || event.parsedDate} • ${event.time} • ${event.location}`,
+        detail: matchesFreeFood
+          ? `🍕 FREE FOOD Included • ${event.club_name}`
+          : event.club_name,
+        score,
+        event,
+      });
+    }
+  }
 
-        if (hostHasPrimaryInterest) {
-          matchedEventIds.add(event.id);
-          results.push({
-            id: `event-${event.id}`,
-            type: 'event',
-            title: event.title,
-            subtitle: `${event.date || event.parsedDate} • ${event.time} • ${event.location}`,
-            detail: event.club_name,
-            score: 0.12,
-            event,
-          });
+  // 4. Sort strictly by best match score (lowest score first)
+  results.sort((a, b) => a.score - b.score);
+
+  return results.slice(0, limit);
+}
+
+/**
+ * Returns a Set of event IDs that match the search query in O(1) per event.
+ * Uses the pre-indexed inverted index and O(1) club event map to avoid quadratic scans.
+ */
+export function getMatchingEventIds(
+  query: string,
+  clubs: ClubRecord[],
+  events: CalendarEvent[]
+): Set<string> {
+  const clean = normalize(query);
+  if (!clean) return new Set();
+
+  const index = getOrBuildIndex(clubs, events);
+  const matchingIds = new Set<string>();
+
+  // 1. Direct O(1) exact event title match
+  const exactEvent = index.eventByTitle.get(clean);
+  if (exactEvent) {
+    matchingIds.add(exactEvent.id);
+  }
+
+  // 2. Query MiniSearch Inverted Index
+  const searchResults = index.miniSearch.search(clean, {
+    fuzzy: (term) => (term.length > 3 ? 0.45 : false),
+    prefix: true,
+  });
+
+  for (const item of searchResults) {
+    if (item.docType === 'event') {
+      matchingIds.add(item.rawId);
+    } else if (item.docType === 'club') {
+      // If a club matches, instantly retrieve all its hosted events in O(1)
+      const club = index.clubById.get(item.rawId);
+      if (club) {
+        const cHandle = cleanHandle(club.handle);
+        const clubEventIds = index.eventsByClubHandle.get(cHandle);
+        if (clubEventIds) {
+          for (const eid of clubEventIds) {
+            matchingIds.add(eid);
+          }
         }
       }
     }
   }
 
-  // 3. Fuzzy search for Clubs using Fuse.js
-  const remainingClubs = clubs.filter((c) => !matchedClubIds.has(String(c.id || c.handle)));
-  if (remainingClubs.length > 0) {
-    const clubFuse = new Fuse(remainingClubs, clubFuseOptions);
-    const clubFuzzyResults = clubFuse.search(clean);
-
-    for (const item of clubFuzzyResults) {
-      const club = item.item;
-      const score = item.score ?? 0.4;
-      const handleClean = club.handle.toLowerCase().replace(/^@/, '');
-
-      const matchingInterest = (club.interests || []).find((interest) =>
-        interest.toLowerCase().includes(clean)
-      );
-
-      results.push({
-        id: `club-${club.id || club.handle}`,
-        type: 'club',
-        title: club.name,
-        subtitle: `@${handleClean}${club.category ? ` • ${club.category}` : ''}`,
-        detail: matchingInterest ? `Matches interest: ${matchingInterest}` : club.biography,
-        score,
-        matchedInterest: matchingInterest,
-        club,
-      });
-    }
-  }
-
-  // 4. Fuzzy search for Events using Fuse.js
-  const remainingEvents = events.filter((e) => !matchedEventIds.has(e.id));
-  if (remainingEvents.length > 0) {
-    const eventFuse = new Fuse(remainingEvents, eventFuseOptions);
-    const eventFuzzyResults = eventFuse.search(clean);
-
-    for (const item of eventFuzzyResults) {
-      const event = item.item;
-      const score = item.score ?? 0.4;
-
-      results.push({
-        id: `event-${event.id}`,
-        type: 'event',
-        title: event.title,
-        subtitle: `${event.date || event.parsedDate} • ${event.time} • ${event.location}`,
-        detail: event.club_name,
-        score,
-        event,
-      });
-    }
-  }
-
-  // 5. Sort strictly by best match (lowest score first)
-  results.sort((a, b) => a.score - b.score);
-
-  return results.slice(0, limit);
+  return matchingIds;
 }

@@ -7,6 +7,7 @@ import {
 } from '../types/event';
 import { enrichEvent } from '../utils/dateUtils';
 import { ClubRecord } from '../../lib/types';
+import { getMatchingEventIds } from '../utils/searchEngine';
 
 interface CalendarContextType {
   events: CalendarEvent[];
@@ -101,43 +102,13 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // Filtered events
   const filteredEvents = useMemo(() => {
+    const isSearching = Boolean(searchQuery.trim());
+    const matchingIds = isSearching ? getMatchingEventIds(searchQuery, clubs, events) : null;
+
     return events.filter(event => {
-      // Search query
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const qClean = q.replace(/^@/, '');
-        const matchesTitle = event.title.toLowerCase().includes(q);
-        const matchesClub =
-          event.club_name.toLowerCase().includes(q) ||
-          event.club_handle.toLowerCase().includes(q) ||
-          event.club_handle.toLowerCase().replace(/^@/, '').includes(qClean);
-        const matchesLoc = event.location.toLowerCase().includes(q);
-        const matchesDesc = (event.description || '').toLowerCase().includes(q);
-
-        const isFreeFoodSearch =
-          q === 'free food' ||
-          q.includes('free food') ||
-          q.includes('freefood') ||
-          q === 'food' ||
-          q === 'free' ||
-          'free food'.includes(q) ||
-          q.includes('pizza');
-        const matchesFreeFood = Boolean(event.has_free_food) && isFreeFoodSearch;
-
-        // Also check if search query matches any interest tag of this event's club
-        const matchingClub = clubs.find(c => {
-          const cName = c.name.toLowerCase();
-          const cHandle = c.handle.toLowerCase().replace(/^@/, '');
-          const isThisClub =
-            event.club_name.toLowerCase().includes(cName) ||
-            event.club_handle.toLowerCase().replace(/^@/, '') === cHandle;
-          if (!isThisClub) return false;
-          return (c.interests || []).some(interest => interest.toLowerCase().includes(q));
-        });
-
-        if (!matchesTitle && !matchesClub && !matchesLoc && !matchesDesc && !matchesFreeFood && !matchingClub) {
-          return false;
-        }
+      // Search query filter (O(1) set lookup)
+      if (matchingIds && !matchingIds.has(event.id)) {
+        return false;
       }
 
       // Category filter
