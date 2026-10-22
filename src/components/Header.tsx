@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, startTransition } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -75,13 +75,15 @@ export const Header: React.FC = () => {
     setLocalSearch(searchQuery);
   }, [searchQuery]);
 
-  // Debounce syncing localSearch to the heavy global CalendarContext (prevents freezing while typing)
+  // Debounce syncing localSearch to the heavy global CalendarContext (prevents freezing while typing or deleting)
   useEffect(() => {
     const timer = setTimeout(() => {
       if (localSearch !== searchQuery) {
-        setSearchQuery(localSearch);
+        startTransition(() => {
+          setSearchQuery(localSearch);
+        });
       }
-    }, 150);
+    }, 200);
     return () => clearTimeout(timer);
   }, [localSearch, searchQuery, setSearchQuery]);
 
@@ -94,7 +96,9 @@ export const Header: React.FC = () => {
   const handleSelectResult = (item: SearchResultItem) => {
     if (item.type === 'club' && item.club) {
       setLocalSearch(item.club.name);
-      setSearchQuery(item.club.name);
+      startTransition(() => {
+        setSearchQuery(item.club.name);
+      });
       setSearchDropdownOpen(false);
     } else if (item.type === 'event' && item.event) {
       setSelectedEvent(item.event);
@@ -125,7 +129,9 @@ export const Header: React.FC = () => {
         handleSelectResult(selected);
       } else {
         // Immediate calendar filter on Enter key
-        setSearchQuery(localSearch);
+        startTransition(() => {
+          setSearchQuery(localSearch);
+        });
         setSearchDropdownOpen(false);
       }
     } else if (e.key === 'Escape') {
@@ -417,7 +423,9 @@ export const Header: React.FC = () => {
                 type="button"
                 onClick={() => {
                   setLocalSearch('');
-                  setSearchQuery('');
+                  startTransition(() => {
+                    setSearchQuery('');
+                  });
                   setSearchDropdownOpen(false);
                 }}
                 className="absolute right-2 top-1/2 -translate-y-1/2 flex size-5 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700"

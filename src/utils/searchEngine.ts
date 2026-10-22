@@ -204,6 +204,17 @@ function isFreeFoodSearch(clean: string): boolean {
 }
 
 /**
+ * Calculates optimal fuzzy edit distance.
+ * Allows typo tolerance on medium words (e.g. 'esprot', 'codng'), but caps
+ * strictly at max 2 edits on long words to prevent combinatorial explosion.
+ */
+function fuzzyDistance(term: string): number | false {
+  if (term.length <= 3) return false;
+  if (term.length <= 7) return 0.45;
+  return 2;
+}
+
+/**
  * Searches clubs and events and returns combined results sorted strictly by best match score.
  * Employs Tier 1/2 exact/prefix priority boosting + cached MiniSearch Radix inverted index.
  */
@@ -285,7 +296,7 @@ export function getBestMatches(
 
   const searchResults = index.miniSearch.search(clean, {
     fields: searchFields,
-    fuzzy: clean.length > 3 ? (term) => (term.length > 3 ? 0.45 : false) : false,
+    fuzzy: clean.length > 3 ? fuzzyDistance : false,
     prefix: true,
   });
 
@@ -419,11 +430,13 @@ export function getMatchingEventIds(
 
   const searchResults = index.miniSearch.search(clean, {
     fields: searchFields,
-    fuzzy: clean.length > 3 ? (term) => (term.length > 3 ? 0.45 : false) : false,
+    fuzzy: clean.length > 3 ? fuzzyDistance : false,
     prefix: true,
   });
 
-  for (const item of searchResults) {
+  const candidates = searchResults.slice(0, 60);
+
+  for (const item of candidates) {
     if (item.docType === 'event') {
       matchingIds.add(item.rawId);
     } else if (item.docType === 'club') {
