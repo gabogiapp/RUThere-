@@ -1,4 +1,4 @@
-import { getBestMatches, getMatchingEventIds } from '../src/utils/searchEngine';
+import { getBestMatches, getMatchingEventIds, parseSearchQuery } from '../src/utils/searchEngine';
 import { ClubRecord } from '../lib/types';
 import { CalendarEvent } from '../src/types/event';
 
@@ -137,6 +137,48 @@ const sampleEvents: CalendarEvent[] = [
     important_links: [],
     description: 'Hands on microcontroller building session.',
   },
+  {
+    id: 'evt-past-1',
+    title: 'Intro to Python Workshop',
+    date: 'Wednesday, Sep 15',
+    parsedDate: '2026-09-15',
+    time: '7:00 PM',
+    location: 'Hill Center 114',
+    campus: 'Busch',
+    category: 'Tech & Coding',
+    club_name: 'Rutgers USACS',
+    club_handle: '@rutgersusacs',
+    color_scheme: 'blue',
+    is_event: true,
+    is_all_day: false,
+    has_free_food: false,
+    startMinutes: 1140,
+    endMinutes: 1260,
+    displayDuration: '2h',
+    important_links: [],
+    description: 'Past Python workshop from early September.',
+  },
+  {
+    id: 'evt-past-2',
+    title: 'Summer Coding Kickoff',
+    date: 'Monday, Aug 10',
+    parsedDate: '2026-08-10',
+    time: '5:00 PM',
+    location: 'Busch Student Center',
+    campus: 'Busch',
+    category: 'Tech & Coding',
+    club_name: 'Rutgers USACS',
+    club_handle: '@rutgersusacs',
+    color_scheme: 'blue',
+    is_event: true,
+    is_all_day: false,
+    has_free_food: false,
+    startMinutes: 1020,
+    endMinutes: 1140,
+    displayDuration: '2h',
+    important_links: [],
+    description: 'Old summer kickoff meeting.',
+  },
 ];
 
 function runTests() {
@@ -225,6 +267,53 @@ function runTests() {
     'getMatchingEventIds returns Set containing HackRU event ID',
     matchingEventIds.has('evt-2'),
     `Set entries: ${Array.from(matchingEventIds).join(', ')}`
+  );
+
+  // 7. Smart Modifier Token Parsing
+  const parsed1 = parseSearchQuery('#past robotics');
+  const parsed2 = parseSearchQuery('hackathon is:past');
+  assert(
+    'parseSearchQuery correctly identifies #past and is:past modifier tokens',
+    parsed1.isArchive === true &&
+      parsed1.cleanQuery === 'robotics' &&
+      parsed2.isArchive === true &&
+      parsed2.cleanQuery === 'hackathon',
+    `parsed1: ${JSON.stringify(parsed1)}, parsed2: ${JSON.stringify(parsed2)}`
+  );
+
+  // 8. Upcoming Scoping (Default skips past events)
+  const defaultUpcomingWorkshop = getBestMatches('workshop', sampleClubs, sampleEvents);
+  assert(
+    'Default search returns only upcoming workshop and skips past events',
+    defaultUpcomingWorkshop.some((r) => r.event?.id === 'evt-1') &&
+      !defaultUpcomingWorkshop.some((r) => r.event?.id === 'evt-past-1'),
+    `Results: ${defaultUpcomingWorkshop.map((r) => `${r.title} (${r.event?.id})`).join(', ')}`
+  );
+
+  // 9. Past Mode Scoping (via #past modifier)
+  const pastWorkshop = getBestMatches('workshop #past', sampleClubs, sampleEvents);
+  assert(
+    'Past search with #past returns past workshop with isPast flag',
+    pastWorkshop.some((r) => r.event?.id === 'evt-past-1' && r.isPast === true),
+    `Results: ${pastWorkshop.map((r) => `${r.title} (${r.event?.id}, isPast: ${r.isPast})`).join(', ')}`
+  );
+
+  // 10. Chronological Sorting in Past Mode (Most recent past first)
+  const allPastMatches = getBestMatches('#past', sampleClubs, sampleEvents);
+  const past1Idx = allPastMatches.findIndex((r) => r.event?.id === 'evt-past-1'); // Sep 15
+  const past2Idx = allPastMatches.findIndex((r) => r.event?.id === 'evt-past-2'); // Aug 10
+  assert(
+    'Past events sort chronologically from most recent past to oldest past',
+    past1Idx !== -1 && past2Idx !== -1 && past1Idx < past2Idx,
+    `evt-past-1 idx: ${past1Idx}, evt-past-2 idx: ${past2Idx}`
+  );
+
+  // 11. getMatchingEventIds with #past returns past event IDs
+  const pastEventIds = getMatchingEventIds('workshop #past', sampleClubs, sampleEvents);
+  assert(
+    'getMatchingEventIds with #past returns past event ID and excludes upcoming',
+    pastEventIds.has('evt-past-1') && !pastEventIds.has('evt-1'),
+    `Set entries: ${Array.from(pastEventIds).join(', ')}`
   );
 
   console.log(`\nTests Completed: ${passed}/${total} passed.\n`);

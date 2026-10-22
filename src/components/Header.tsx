@@ -8,6 +8,7 @@ import {
   MapPin,
   Tag,
   Check,
+  History,
 } from 'lucide-react';
 import { useCalendar } from '../context/CalendarContext';
 import { CalendarViewType, ClubCategory, RutgersCampus, ColorVariant } from '../types/event';
@@ -20,7 +21,7 @@ import {
   formatIsoDate,
 } from '../utils/dateUtils';
 import { SearchDropdown } from './SearchDropdown';
-import { getBestMatches, SearchResultItem } from '../utils/searchEngine';
+import { getBestMatches, SearchResultItem, parseSearchQuery } from '../utils/searchEngine';
 
 const CAMPUSES: (RutgersCampus | 'All')[] = [
   'All',
@@ -87,10 +88,35 @@ export const Header: React.FC = () => {
     return () => clearTimeout(timer);
   }, [localSearch, searchQuery, setSearchQuery]);
 
+  // Parse current query for archive status (#past, is:past, past:)
+  const { isArchive: isArchiveMode } = useMemo(() => {
+    return parseSearchQuery(localSearch);
+  }, [localSearch]);
+
   // Compute best matches IMMEDIATELY for the dropdown using localSearch (< 1ms instant UX)
   const searchMatches = useMemo(() => {
     return getBestMatches(localSearch, clubs, events, 8);
   }, [localSearch, clubs, events]);
+
+  // Toggle past events archive mode (#past)
+  const handleToggleArchive = () => {
+    if (isArchiveMode) {
+      const stripped = localSearch
+        .replace(/(?:^|\s)(?:#past|is:past|past:)(?:\s|$)/gi, ' ')
+        .trim();
+      setLocalSearch(stripped);
+      startTransition(() => {
+        setSearchQuery(stripped);
+      });
+    } else {
+      const updated = localSearch.trim() ? `${localSearch.trim()} #past` : '#past';
+      setLocalSearch(updated);
+      startTransition(() => {
+        setSearchQuery(updated);
+      });
+      setSearchDropdownOpen(true);
+    }
+  };
 
   // Handle selecting a search result
   const handleSelectResult = (item: SearchResultItem) => {
@@ -403,36 +429,70 @@ export const Header: React.FC = () => {
             />
             <input
               type="text"
-              placeholder="Search clubs, rooms, interests..."
+              placeholder={
+                isArchiveMode
+                  ? 'Search past events archive...'
+                  : 'Search clubs, rooms, interests...'
+              }
               value={localSearch}
               onFocus={() => {
-                if (localSearch.trim()) setSearchDropdownOpen(true);
+                if (localSearch.trim() || isArchiveMode) setSearchDropdownOpen(true);
               }}
               onChange={(e) => {
                 const val = e.target.value;
                 setLocalSearch(val);
                 setSelectedIndex(0);
-                if (val.trim()) setSearchDropdownOpen(true);
+                if (val.trim() || isArchiveMode) setSearchDropdownOpen(true);
                 else setSearchDropdownOpen(false);
               }}
               onKeyDown={handleInputKeyDown}
-              className="h-9 w-full rounded-xl bg-white pl-9 pr-8 text-[13px] text-[#141414] placeholder-gray-400 outline-none ring-1 ring-black/10 focus:ring-2 focus:ring-white transition-all shadow-xs"
+              className={`h-9 w-full rounded-xl bg-white pl-9 pr-14 text-[13px] text-[#141414] placeholder-gray-400 outline-none transition-all shadow-xs ${
+                isArchiveMode
+                  ? 'ring-2 ring-amber-400/90 bg-amber-50/20'
+                  : 'ring-1 ring-black/10 focus:ring-2 focus:ring-white'
+              }`}
             />
-            {localSearch && (
+            {/* Action buttons inside search bar */}
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+              {/* History / Archive mode toggle button */}
               <button
                 type="button"
-                onClick={() => {
-                  setLocalSearch('');
-                  startTransition(() => {
-                    setSearchQuery('');
-                  });
-                  setSearchDropdownOpen(false);
-                }}
-                className="absolute right-2 top-1/2 -translate-y-1/2 flex size-5 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                onClick={handleToggleArchive}
+                className={`flex size-6 items-center justify-center rounded-lg transition-colors cursor-pointer ${
+                  isArchiveMode
+                    ? 'bg-amber-100 hover:bg-amber-200 ring-1 ring-amber-300'
+                    : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'
+                }`}
+                title={
+                  isArchiveMode
+                    ? 'Exit past events archive (switch to upcoming)'
+                    : 'Search past events archive (#past)'
+                }
               >
-                <X size={12} />
+                <History
+                  size={13}
+                  className={isArchiveMode ? 'text-amber-800' : 'text-gray-500'}
+                />
               </button>
-            )}
+
+              {/* Clear button */}
+              {localSearch && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLocalSearch('');
+                    startTransition(() => {
+                      setSearchQuery('');
+                    });
+                    setSearchDropdownOpen(false);
+                  }}
+                  className="flex size-5 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                  title="Clear search"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
 
             {/* Live Search Dropdown */}
             <SearchDropdown
@@ -440,6 +500,8 @@ export const Header: React.FC = () => {
               selectedIndex={selectedIndex}
               isOpen={searchDropdownOpen}
               query={localSearch}
+              isArchiveMode={isArchiveMode}
+              onToggleArchive={handleToggleArchive}
               onSelectResult={handleSelectResult}
               onMouseEnterItem={setSelectedIndex}
             />
