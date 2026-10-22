@@ -174,7 +174,6 @@ function getOrBuildIndex(clubs: ClubRecord[], events: CalendarEvent[]): CachedIn
         description: 0.8,
         biography: 0.8,
       },
-      fuzzy: (term) => (term.length > 3 ? 0.45 : false),
       prefix: true,
     },
     tokenize: (text) => (text || '').toLowerCase().split(/[\s,._\-/]+/).filter(Boolean),
@@ -273,13 +272,25 @@ export function getBestMatches(
 
   // 3. MiniSearch Inverted Index Query (Fuzzy + Prefix Typo-Tolerant Match)
   const isFreeFood = isFreeFoodSearch(clean);
+
+  // For 1-character queries: search ONLY title and handle with prefix matching (no deep body search)
+  // For 2-character queries: search title, handle, interests, category
+  // For 3+ character queries: full search across all fields with fuzzy typo tolerance
+  const searchFields =
+    clean.length === 1
+      ? ['title', 'handle']
+      : clean.length === 2
+      ? ['title', 'handle', 'interests', 'category']
+      : undefined;
+
   const searchResults = index.miniSearch.search(clean, {
-    fuzzy: (term) => (term.length > 3 ? 0.45 : false),
+    fields: searchFields,
+    fuzzy: clean.length > 3 ? (term) => (term.length > 3 ? 0.45 : false) : false,
     prefix: true,
   });
 
   // Evaluate top candidates from inverted index (capping candidate pool for sub-millisecond response)
-  const candidates = searchResults.slice(0, 40);
+  const candidates = searchResults.slice(0, 30);
 
   for (const item of candidates) {
     const isClub = item.docType === 'club';
@@ -316,7 +327,6 @@ export function getBestMatches(
       } else if (matchingRelatedInterest) {
         score = 0.20;
       } else {
-        // Map MiniSearch score (higher is better) to lower-is-better score in range [0.22, 0.45]
         score = Math.max(0.22, Math.min(0.45, 0.45 - item.score / 25));
       }
 
@@ -399,8 +409,17 @@ export function getMatchingEventIds(
   }
 
   // 2. Query MiniSearch Inverted Index
+  // For short queries, filter search fields to avoid matching every word in long event captions
+  const searchFields =
+    clean.length === 1
+      ? ['title', 'handle']
+      : clean.length === 2
+      ? ['title', 'handle', 'interests', 'category']
+      : undefined;
+
   const searchResults = index.miniSearch.search(clean, {
-    fuzzy: (term) => (term.length > 3 ? 0.45 : false),
+    fields: searchFields,
+    fuzzy: clean.length > 3 ? (term) => (term.length > 3 ? 0.45 : false) : false,
     prefix: true,
   });
 
@@ -408,7 +427,6 @@ export function getMatchingEventIds(
     if (item.docType === 'event') {
       matchingIds.add(item.rawId);
     } else if (item.docType === 'club') {
-      // If a club matches, instantly retrieve all its hosted events in O(1)
       const club = index.clubById.get(item.rawId);
       if (club) {
         const cHandle = cleanHandle(club.handle);

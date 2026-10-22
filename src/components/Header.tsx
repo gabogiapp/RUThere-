@@ -63,20 +63,37 @@ export const Header: React.FC = () => {
   const [calendarPopoverOpen, setCalendarPopoverOpen] = useState(false);
   const [searchDropdownOpen, setSearchDropdownOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [localSearch, setLocalSearch] = useState(searchQuery);
 
   const campusRef = useRef<HTMLDivElement>(null);
   const categoryRef = useRef<HTMLDivElement>(null);
   const monthRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLDivElement>(null);
 
-  // Compute best matches sorted strictly by relevance
+  // Keep localSearch in sync if searchQuery is modified externally
+  useEffect(() => {
+    setLocalSearch(searchQuery);
+  }, [searchQuery]);
+
+  // Debounce syncing localSearch to the heavy global CalendarContext (prevents freezing while typing)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (localSearch !== searchQuery) {
+        setSearchQuery(localSearch);
+      }
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [localSearch, searchQuery, setSearchQuery]);
+
+  // Compute best matches IMMEDIATELY for the dropdown using localSearch (< 1ms instant UX)
   const searchMatches = useMemo(() => {
-    return getBestMatches(searchQuery, clubs, events, 8);
-  }, [searchQuery, clubs, events]);
+    return getBestMatches(localSearch, clubs, events, 8);
+  }, [localSearch, clubs, events]);
 
   // Handle selecting a search result
   const handleSelectResult = (item: SearchResultItem) => {
     if (item.type === 'club' && item.club) {
+      setLocalSearch(item.club.name);
       setSearchQuery(item.club.name);
       setSearchDropdownOpen(false);
     } else if (item.type === 'event' && item.event) {
@@ -106,6 +123,10 @@ export const Header: React.FC = () => {
       const selected = searchMatches[selectedIndex];
       if (selected) {
         handleSelectResult(selected);
+      } else {
+        // Immediate calendar filter on Enter key
+        setSearchQuery(localSearch);
+        setSearchDropdownOpen(false);
       }
     } else if (e.key === 'Escape') {
       setSearchDropdownOpen(false);
@@ -377,22 +398,25 @@ export const Header: React.FC = () => {
             <input
               type="text"
               placeholder="Search clubs, rooms, interests..."
-              value={searchQuery}
+              value={localSearch}
               onFocus={() => {
-                if (searchQuery.trim()) setSearchDropdownOpen(true);
+                if (localSearch.trim()) setSearchDropdownOpen(true);
               }}
               onChange={(e) => {
-                setSearchQuery(e.target.value);
+                const val = e.target.value;
+                setLocalSearch(val);
                 setSelectedIndex(0);
-                setSearchDropdownOpen(true);
+                if (val.trim()) setSearchDropdownOpen(true);
+                else setSearchDropdownOpen(false);
               }}
               onKeyDown={handleInputKeyDown}
               className="h-9 w-full rounded-xl bg-white pl-9 pr-8 text-[13px] text-[#141414] placeholder-gray-400 outline-none ring-1 ring-black/10 focus:ring-2 focus:ring-white transition-all shadow-xs"
             />
-            {searchQuery && (
+            {localSearch && (
               <button
                 type="button"
                 onClick={() => {
+                  setLocalSearch('');
                   setSearchQuery('');
                   setSearchDropdownOpen(false);
                 }}
@@ -407,7 +431,7 @@ export const Header: React.FC = () => {
               results={searchMatches}
               selectedIndex={selectedIndex}
               isOpen={searchDropdownOpen}
-              query={searchQuery}
+              query={localSearch}
               onSelectResult={handleSelectResult}
               onMouseEnterItem={setSelectedIndex}
             />
