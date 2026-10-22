@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { SearchResultItem } from '../utils/searchEngine';
-import { Users, Calendar, History, ArrowRight } from 'lucide-react';
+import { Users, Calendar, History } from 'lucide-react';
 
 interface SearchDropdownProps {
   results: SearchResultItem[];
@@ -19,7 +19,6 @@ export const SearchDropdown: React.FC<SearchDropdownProps> = ({
   isOpen,
   query,
   isArchiveMode = false,
-  onToggleArchive,
   onSelectResult,
   onMouseEnterItem,
 }) => {
@@ -59,31 +58,13 @@ export const SearchDropdown: React.FC<SearchDropdownProps> = ({
     return (
       <div className="absolute left-0 right-0 top-11 z-50 rounded-xl border border-[var(--border-color)] bg-white p-3.5 shadow-2xl animate-fade-in text-[12px] text-gray-500">
         <p className="font-semibold text-[#141414]">
-          {isArchiveMode ? 'No past events found' : 'No upcoming matches found'}
+          {isArchiveMode ? 'No past events found' : 'No matches found'}
         </p>
         <p className="text-[11px] text-gray-400 mt-1">
           {isArchiveMode
             ? 'Try searching with a broader keyword, club name, or room location.'
-            : 'Looking for an event that took place earlier this semester?'}
+            : 'Try searching by club name, room location, or an interest like "coding" or "gaming".'}
         </p>
-
-        {onToggleArchive && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onToggleArchive();
-            }}
-            className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg border border-amber-300/80 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-900 hover:bg-amber-100 transition-colors cursor-pointer shadow-2xs"
-          >
-            <History size={12} className="text-amber-700" />
-            <span>
-              {isArchiveMode ? 'Switch to upcoming events' : 'Search Past Events Archive (#past)'}
-            </span>
-            <ArrowRight size={11} className="text-amber-700 ml-0.5" />
-          </button>
-        )}
       </div>
     );
   }
@@ -95,38 +76,22 @@ export const SearchDropdown: React.FC<SearchDropdownProps> = ({
       tabIndex={-1}
       role="listbox"
     >
-      {/* Dropdown Header with Mode Badge & Quick Toggle */}
-      <div className="flex items-center justify-between px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider border-b border-gray-100 mb-1">
-        <div className="flex items-center gap-1.5">
+      {/* Dropdown Header */}
+      <div className="flex items-center justify-between px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider border-b border-gray-100 mb-1">
+        <div>
           {isArchiveMode ? (
             <span className="inline-flex items-center gap-1 text-amber-800 bg-amber-100/70 border border-amber-200/80 px-1.5 py-0.5 rounded text-[9px] font-bold">
               <History size={10} />
-              <span>Past Events Archive</span>
+              <span>Past Events</span>
             </span>
           ) : (
-            <span className="text-gray-400">Upcoming Matches</span>
+            <span className="text-gray-400">Best Matches</span>
           )}
         </div>
 
-        {onToggleArchive && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onToggleArchive();
-            }}
-            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium transition-colors cursor-pointer lowercase ${
-              isArchiveMode
-                ? 'text-gray-600 hover:text-black hover:bg-gray-100 border border-gray-200'
-                : 'text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200/70'
-            }`}
-            title={isArchiveMode ? 'Switch back to upcoming events' : 'Search past events archive'}
-          >
-            <History size={10} />
-            <span>{isArchiveMode ? 'view upcoming' : 'search #past'}</span>
-          </button>
-        )}
+        <span className="font-normal font-mono text-[9px] lowercase text-gray-400">
+          use arrows & enter
+        </span>
       </div>
 
       <div className="space-y-0.5">

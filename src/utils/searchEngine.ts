@@ -73,20 +73,6 @@ export function getTodayIso(): string {
 }
 
 /**
- * Parses search query to detect smart archive tokens (#past, is:past, past:)
- */
-export function parseSearchQuery(rawQuery: string): {
-  cleanQuery: string;
-  isArchive: boolean;
-} {
-  const isArchive = /(?:^|\s)(?:#past|is:past|past:)(?:\s|$)/i.test(rawQuery);
-  const cleanQuery = rawQuery
-    .replace(/(?:^|\s)(?:#past|is:past|past:)(?:\s|$)/gi, ' ')
-    .trim();
-  return { cleanQuery, isArchive };
-}
-
-/**
  * Builds or retrieves the cached MiniSearch inverted index and O(1) entity maps.
  * Rebuilds only when the clubs or events array reference changes.
  */
@@ -266,7 +252,7 @@ function fuzzyDistance(term: string): number | false {
  * cutting search volume by ~86% for blazing speed and relevance.
  *
  * In Upcoming mode: events in similar relevance tiers are sorted soonest first.
- * In Past mode (#past): events in similar relevance tiers are sorted most recent past first.
+ * In Past mode: events in similar relevance tiers are sorted most recent past first.
  */
 export function getBestMatches(
   query: string,
@@ -279,21 +265,16 @@ export function getBestMatches(
       ? { limit: optionsOrLimit, scope: 'upcoming' }
       : { limit: 8, scope: 'upcoming', ...optionsOrLimit };
 
-  const rawClean = normalize(query);
-  if (!rawClean) return [];
-
-  // Parse query for smart modifier tokens (#past, is:past, past:)
-  const parsed = parseSearchQuery(rawClean);
-  const clean = parsed.cleanQuery;
-  const scope: SearchTimeScope = parsed.isArchive ? 'past' : options.scope || 'upcoming';
+  const clean = normalize(query);
+  const scope: SearchTimeScope = options.scope || 'upcoming';
   const limit = options.limit || 8;
 
   const index = getOrBuildIndex(clubs, events);
   const todayIso = index.todayIso;
 
-  // If query is solely an archive modifier (#past), return most recent past events
+  // When query is empty: in past mode, return most recent past events; otherwise empty
   if (!clean) {
-    if (parsed.isArchive) {
+    if (scope === 'past') {
       const pastEvents = events
         .filter((e) => Boolean(e.parsedDate && e.parsedDate < todayIso))
         .sort((a, b) => {
@@ -547,15 +528,11 @@ export function getMatchingEventIds(
   events: CalendarEvent[],
   options?: SearchOptions
 ): Set<string> {
-  const rawClean = normalize(query);
-  if (!rawClean) return new Set();
-
-  const parsed = parseSearchQuery(rawClean);
-  const clean = parsed.cleanQuery;
-  const scope: SearchTimeScope = parsed.isArchive ? 'past' : options?.scope || 'upcoming';
+  const clean = normalize(query);
+  const scope: SearchTimeScope = options?.scope || 'upcoming';
 
   if (!clean) {
-    if (parsed.isArchive) {
+    if (scope === 'past') {
       const index = getOrBuildIndex(clubs, events);
       const todayIso = index.todayIso;
       const allPast = new Set<string>();

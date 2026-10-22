@@ -1,4 +1,4 @@
-import { getBestMatches, getMatchingEventIds, parseSearchQuery } from '../src/utils/searchEngine';
+import { getBestMatches, getMatchingEventIds } from '../src/utils/searchEngine';
 import { ClubRecord } from '../lib/types';
 import { CalendarEvent } from '../src/types/event';
 
@@ -269,19 +269,7 @@ function runTests() {
     `Set entries: ${Array.from(matchingEventIds).join(', ')}`
   );
 
-  // 7. Smart Modifier Token Parsing
-  const parsed1 = parseSearchQuery('#past robotics');
-  const parsed2 = parseSearchQuery('hackathon is:past');
-  assert(
-    'parseSearchQuery correctly identifies #past and is:past modifier tokens',
-    parsed1.isArchive === true &&
-      parsed1.cleanQuery === 'robotics' &&
-      parsed2.isArchive === true &&
-      parsed2.cleanQuery === 'hackathon',
-    `parsed1: ${JSON.stringify(parsed1)}, parsed2: ${JSON.stringify(parsed2)}`
-  );
-
-  // 8. Upcoming Scoping (Default skips past events)
+  // 7. Upcoming Scoping (Default skips past events)
   const defaultUpcomingWorkshop = getBestMatches('workshop', sampleClubs, sampleEvents);
   assert(
     'Default search returns only upcoming workshop and skips past events',
@@ -290,16 +278,16 @@ function runTests() {
     `Results: ${defaultUpcomingWorkshop.map((r) => `${r.title} (${r.event?.id})`).join(', ')}`
   );
 
-  // 9. Past Mode Scoping (via #past modifier)
-  const pastWorkshop = getBestMatches('workshop #past', sampleClubs, sampleEvents);
+  // 8. Past Mode Scoping (via { scope: 'past' })
+  const pastWorkshop = getBestMatches('workshop', sampleClubs, sampleEvents, { scope: 'past' });
   assert(
-    'Past search with #past returns past workshop with isPast flag',
+    'Past search with { scope: "past" } returns past workshop with isPast flag',
     pastWorkshop.some((r) => r.event?.id === 'evt-past-1' && r.isPast === true),
     `Results: ${pastWorkshop.map((r) => `${r.title} (${r.event?.id}, isPast: ${r.isPast})`).join(', ')}`
   );
 
-  // 10. Chronological Sorting in Past Mode (Most recent past first)
-  const allPastMatches = getBestMatches('#past', sampleClubs, sampleEvents);
+  // 9. Chronological Sorting in Past Mode (Most recent past first)
+  const allPastMatches = getBestMatches('', sampleClubs, sampleEvents, { scope: 'past' });
   const past1Idx = allPastMatches.findIndex((r) => r.event?.id === 'evt-past-1'); // Sep 15
   const past2Idx = allPastMatches.findIndex((r) => r.event?.id === 'evt-past-2'); // Aug 10
   assert(
@@ -308,12 +296,20 @@ function runTests() {
     `evt-past-1 idx: ${past1Idx}, evt-past-2 idx: ${past2Idx}`
   );
 
-  // 11. getMatchingEventIds with #past returns past event IDs
-  const pastEventIds = getMatchingEventIds('workshop #past', sampleClubs, sampleEvents);
+  // 10. getMatchingEventIds with { scope: 'past' } returns past event IDs
+  const pastEventIds = getMatchingEventIds('workshop', sampleClubs, sampleEvents, { scope: 'past' });
   assert(
-    'getMatchingEventIds with #past returns past event ID and excludes upcoming',
+    'getMatchingEventIds with { scope: "past" } returns past event ID and excludes upcoming',
     pastEventIds.has('evt-past-1') && !pastEventIds.has('evt-1'),
     `Set entries: ${Array.from(pastEventIds).join(', ')}`
+  );
+
+  // 11. getMatchingEventIds with empty query in past mode returns all past events
+  const allPastEventIds = getMatchingEventIds('', sampleClubs, sampleEvents, { scope: 'past' });
+  assert(
+    'getMatchingEventIds with empty query in past mode returns all past events',
+    allPastEventIds.has('evt-past-1') && allPastEventIds.has('evt-past-2') && !allPastEventIds.has('evt-1'),
+    `Set entries: ${Array.from(allPastEventIds).join(', ')}`
   );
 
   console.log(`\nTests Completed: ${passed}/${total} passed.\n`);

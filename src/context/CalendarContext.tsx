@@ -22,6 +22,8 @@ interface CalendarContextType {
   setView: (view: CalendarViewType) => void;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
+  searchScope: 'upcoming' | 'past';
+  setSearchScope: (scope: 'upcoming' | 'past') => void;
   selectedCategory: ClubCategory | 'All';
   setSelectedCategory: (cat: ClubCategory | 'All') => void;
   selectedCampus: RutgersCampus | 'All';
@@ -44,6 +46,7 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   // Default state is 'agenda' (List view)
   const [view, setView] = useState<CalendarViewType>('agenda');
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchScope, setSearchScope] = useState<'upcoming' | 'past'>('upcoming');
   const [selectedCategory, setSelectedCategory] = useState<ClubCategory | 'All'>('All');
   const [selectedCampus, setSelectedCampus] = useState<RutgersCampus | 'All'>('All');
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
@@ -103,7 +106,13 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   // Filtered events
   const filteredEvents = useMemo(() => {
     const isSearching = Boolean(searchQuery.trim());
-    const matchingIds = isSearching ? getMatchingEventIds(searchQuery, clubs, events) : null;
+    const isPastMode = searchScope === 'past';
+
+    const matchingIds = isSearching
+      ? getMatchingEventIds(searchQuery, clubs, events, { scope: searchScope })
+      : isPastMode
+      ? getMatchingEventIds('', clubs, events, { scope: 'past' })
+      : null;
 
     return events.filter(event => {
       // Search query filter (O(1) set lookup)
@@ -127,7 +136,7 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
       return true;
     });
-  }, [events, clubs, searchQuery, selectedCategory, selectedCampus]);
+  }, [events, clubs, searchQuery, searchScope, selectedCategory, selectedCampus]);
 
   return (
     <CalendarContext.Provider
@@ -144,6 +153,8 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setView,
         searchQuery,
         setSearchQuery,
+        searchScope,
+        setSearchScope,
         selectedCategory,
         setSelectedCategory,
         selectedCampus,

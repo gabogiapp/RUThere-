@@ -66,7 +66,7 @@ function formatDateHeaderLabel(
 }
 
 export const AgendaView: React.FC = () => {
-  const { filteredEvents, setSelectedEvent, searchQuery, setSearchQuery } = useCalendar();
+  const { filteredEvents, setSelectedEvent, searchQuery } = useCalendar();
 
   const [collapsedDates, setCollapsedDates] = useState<Record<string, boolean>>({});
   const [showPastEvents, setShowPastEvents] = useState(false);
@@ -410,21 +410,9 @@ export const AgendaView: React.FC = () => {
             </h3>
             <p className="text-[13px] text-[var(--text-muted)] mt-1 max-w-md">
               {isSearching
-                ? /(?:^|\s)(?:#past|is:past|past:)(?:\s|$)/i.test(searchQuery)
-                  ? `No past events found matching "${searchQuery}". Try searching with different keywords.`
-                  : `No upcoming events found matching "${searchQuery}".`
+                ? `No events found matching "${searchQuery}". Try searching with different keywords.`
                 : 'No event records match your current campus or category filter.'}
             </p>
-            {isSearching && !/(?:^|\s)(?:#past|is:past|past:)(?:\s|$)/i.test(searchQuery) && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery(`${searchQuery.trim()} #past`)}
-                className="mt-3.5 inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100 transition-colors cursor-pointer shadow-2xs"
-              >
-                <History size={13} className="text-amber-700" />
-                <span>Search Past Events Archive for &quot;{searchQuery.trim()}&quot;</span>
-              </button>
-            )}
           </div>
         ) : !isSearching && !hasUpcoming && !showPastEvents ? (
           /* When there are no upcoming events, but past events exist */

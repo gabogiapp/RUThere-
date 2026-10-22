@@ -21,7 +21,7 @@ import {
   formatIsoDate,
 } from '../utils/dateUtils';
 import { SearchDropdown } from './SearchDropdown';
-import { getBestMatches, SearchResultItem, parseSearchQuery } from '../utils/searchEngine';
+import { getBestMatches, SearchResultItem } from '../utils/searchEngine';
 
 const CAMPUSES: (RutgersCampus | 'All')[] = [
   'All',
@@ -49,6 +49,8 @@ export const Header: React.FC = () => {
     setView,
     searchQuery,
     setSearchQuery,
+    searchScope,
+    setSearchScope,
     selectedCategory,
     setSelectedCategory,
     selectedCampus,
@@ -88,32 +90,21 @@ export const Header: React.FC = () => {
     return () => clearTimeout(timer);
   }, [localSearch, searchQuery, setSearchQuery]);
 
-  // Parse current query for archive status (#past, is:past, past:)
-  const { isArchive: isArchiveMode } = useMemo(() => {
-    return parseSearchQuery(localSearch);
-  }, [localSearch]);
+  const isArchiveMode = searchScope === 'past';
 
   // Compute best matches IMMEDIATELY for the dropdown using localSearch (< 1ms instant UX)
   const searchMatches = useMemo(() => {
-    return getBestMatches(localSearch, clubs, events, 8);
-  }, [localSearch, clubs, events]);
+    return getBestMatches(localSearch, clubs, events, {
+      limit: 8,
+      scope: searchScope,
+    });
+  }, [localSearch, clubs, events, searchScope]);
 
-  // Toggle past events archive mode (#past)
+  // Toggle past events view
   const handleToggleArchive = () => {
-    if (isArchiveMode) {
-      const stripped = localSearch
-        .replace(/(?:^|\s)(?:#past|is:past|past:)(?:\s|$)/gi, ' ')
-        .trim();
-      setLocalSearch(stripped);
-      startTransition(() => {
-        setSearchQuery(stripped);
-      });
-    } else {
-      const updated = localSearch.trim() ? `${localSearch.trim()} #past` : '#past';
-      setLocalSearch(updated);
-      startTransition(() => {
-        setSearchQuery(updated);
-      });
+    const nextScope = isArchiveMode ? 'upcoming' : 'past';
+    setSearchScope(nextScope);
+    if (localSearch.trim() || nextScope === 'past') {
       setSearchDropdownOpen(true);
     }
   };
@@ -431,7 +422,7 @@ export const Header: React.FC = () => {
               type="text"
               placeholder={
                 isArchiveMode
-                  ? 'Search past events archive...'
+                  ? 'Search past events...'
                   : 'Search clubs, rooms, interests...'
               }
               value={localSearch}
@@ -465,8 +456,8 @@ export const Header: React.FC = () => {
                 }`}
                 title={
                   isArchiveMode
-                    ? 'Exit past events archive (switch to upcoming)'
-                    : 'Search past events archive (#past)'
+                    ? 'Viewing past events (click to view upcoming)'
+                    : 'View past events'
                 }
               >
                 <History
