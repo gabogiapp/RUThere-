@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, startTransition } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -8,6 +8,7 @@ import {
   MapPin,
   Tag,
   Check,
+  History,
 } from 'lucide-react';
 import { useCalendar } from '../context/CalendarContext';
 import { CalendarViewType, ClubCategory, RutgersCampus, ColorVariant } from '../types/event';
@@ -48,6 +49,8 @@ export const Header: React.FC = () => {
     setView,
     searchQuery,
     setSearchQuery,
+    searchScope,
+    setSearchScope,
     selectedCategory,
     setSelectedCategory,
     selectedCampus,
@@ -63,21 +66,56 @@ export const Header: React.FC = () => {
   const [calendarPopoverOpen, setCalendarPopoverOpen] = useState(false);
   const [searchDropdownOpen, setSearchDropdownOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [localSearch, setLocalSearch] = useState(searchQuery);
 
   const campusRef = useRef<HTMLDivElement>(null);
   const categoryRef = useRef<HTMLDivElement>(null);
   const monthRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLDivElement>(null);
 
-  // Compute best matches sorted strictly by relevance
+  // Keep localSearch in sync if searchQuery is modified externally
+  useEffect(() => {
+    setLocalSearch(searchQuery);
+  }, [searchQuery]);
+
+  // Debounce syncing localSearch to the heavy global CalendarContext (prevents freezing while typing or deleting)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (localSearch !== searchQuery) {
+        startTransition(() => {
+          setSearchQuery(localSearch);
+        });
+      }
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [localSearch, searchQuery, setSearchQuery]);
+
+  const isArchiveMode = searchScope === 'past';
+
+  // Compute best matches IMMEDIATELY for the dropdown using localSearch (< 1ms instant UX)
   const searchMatches = useMemo(() => {
-    return getBestMatches(searchQuery, clubs, events, 8);
-  }, [searchQuery, clubs, events]);
+    return getBestMatches(localSearch, clubs, events, {
+      limit: 8,
+      scope: searchScope,
+    });
+  }, [localSearch, clubs, events, searchScope]);
+
+  // Toggle past events view
+  const handleToggleArchive = () => {
+    const nextScope = isArchiveMode ? 'upcoming' : 'past';
+    setSearchScope(nextScope);
+    if (localSearch.trim() || nextScope === 'past') {
+      setSearchDropdownOpen(true);
+    }
+  };
 
   // Handle selecting a search result
   const handleSelectResult = (item: SearchResultItem) => {
     if (item.type === 'club' && item.club) {
-      setSearchQuery(item.club.name);
+      setLocalSearch(item.club.name);
+      startTransition(() => {
+        setSearchQuery(item.club.name);
+      });
       setSearchDropdownOpen(false);
     } else if (item.type === 'event' && item.event) {
       setSelectedEvent(item.event);
@@ -106,6 +144,12 @@ export const Header: React.FC = () => {
       const selected = searchMatches[selectedIndex];
       if (selected) {
         handleSelectResult(selected);
+      } else {
+        // Immediate calendar filter on Enter key
+        startTransition(() => {
+          setSearchQuery(localSearch);
+        });
+        setSearchDropdownOpen(false);
       }
     } else if (e.key === 'Escape') {
       setSearchDropdownOpen(false);
@@ -376,38 +420,79 @@ export const Header: React.FC = () => {
             />
             <input
               type="text"
-              placeholder="Search clubs, rooms, interests..."
-              value={searchQuery}
+              placeholder={
+                isArchiveMode
+                  ? 'Search past events...'
+                  : 'Search clubs, rooms, interests...'
+              }
+              value={localSearch}
               onFocus={() => {
-                if (searchQuery.trim()) setSearchDropdownOpen(true);
+                if (localSearch.trim() || isArchiveMode) setSearchDropdownOpen(true);
               }}
               onChange={(e) => {
-                setSearchQuery(e.target.value);
+                const val = e.target.value;
+                setLocalSearch(val);
                 setSelectedIndex(0);
-                setSearchDropdownOpen(true);
+                if (val.trim() || isArchiveMode) setSearchDropdownOpen(true);
+                else setSearchDropdownOpen(false);
               }}
               onKeyDown={handleInputKeyDown}
-              className="h-9 w-full rounded-xl bg-white pl-9 pr-8 text-[13px] text-[#141414] placeholder-gray-400 outline-none ring-1 ring-black/10 focus:ring-2 focus:ring-white transition-all shadow-xs"
+              className={`h-9 w-full rounded-xl bg-white pl-9 pr-14 text-[13px] text-[#141414] placeholder-gray-400 outline-none transition-all shadow-xs ${
+                isArchiveMode
+                  ? 'ring-2 ring-amber-400/90 bg-amber-50/20'
+                  : 'ring-1 ring-black/10 focus:ring-2 focus:ring-white'
+              }`}
             />
-            {searchQuery && (
+            {/* Action buttons inside search bar */}
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+              {/* History / Archive mode toggle button */}
               <button
                 type="button"
-                onClick={() => {
-                  setSearchQuery('');
-                  setSearchDropdownOpen(false);
-                }}
-                className="absolute right-2 top-1/2 -translate-y-1/2 flex size-5 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                onClick={handleToggleArchive}
+                className={`flex size-6 items-center justify-center rounded-lg transition-colors cursor-pointer ${
+                  isArchiveMode
+                    ? 'bg-amber-100 hover:bg-amber-200 ring-1 ring-amber-300'
+                    : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'
+                }`}
+                title={
+                  isArchiveMode
+                    ? 'Viewing past events (click to view upcoming)'
+                    : 'View past events'
+                }
               >
-                <X size={12} />
+                <History
+                  size={13}
+                  className={isArchiveMode ? 'text-amber-800' : 'text-gray-500'}
+                />
               </button>
-            )}
+
+              {/* Clear button */}
+              {localSearch && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLocalSearch('');
+                    startTransition(() => {
+                      setSearchQuery('');
+                    });
+                    setSearchDropdownOpen(false);
+                  }}
+                  className="flex size-5 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                  title="Clear search"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
 
             {/* Live Search Dropdown */}
             <SearchDropdown
               results={searchMatches}
               selectedIndex={selectedIndex}
               isOpen={searchDropdownOpen}
-              query={searchQuery}
+              query={localSearch}
+              isArchiveMode={isArchiveMode}
+              onToggleArchive={handleToggleArchive}
               onSelectResult={handleSelectResult}
               onMouseEnterItem={setSelectedIndex}
             />

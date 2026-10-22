@@ -10,7 +10,7 @@ This system scrapes Instagram posts from a predefined list of Rutgers University
 * **Database:** **Neon (Serverless PostgreSQL)**. Chosen for its seamless integration with Vercel and zero-cold-start performance.
 * **Ingestion Engine:** **Bright Data Social Media Scraper API** (`instagram-posts-collect-by-url`).
 * **Frontend Calendar:** **FullCalendar (React)**. Chosen for its robust feature set, timezone handling, and out-of-the-box UI.
-* **Frontend Search:** **Fuse.js**. A client-side fuzzy search library for instant, typo-tolerant event filtering.
+* **Frontend Search:** **MiniSearch**. A high-performance, in-memory inverted index and Radix tree search engine with O(1) hash lookups for instant, typo-tolerant event and club filtering.
 
 ## 3. Database Schema
 

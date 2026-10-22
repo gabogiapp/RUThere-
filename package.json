@@ -16,7 +16,8 @@
     "cron:resume-10": "node scripts/run-cron.js --max-posts=10 --force --resume-from=10",
     "cron:resume-13": "node scripts/run-cron.js --max-posts=10 --force --resume-from=13",
     "cron:resume-14": "node scripts/run-cron.js --max-posts=10 --force --resume-from=14",
-    "cleanup:batches-13-plus": "node scripts/cleanup-batches-13-plus.js"
+    "cleanup:batches-13-plus": "node scripts/cleanup-batches-13-plus.js",
+    "test:search": "tsx scripts/test-search-perf.ts"
   },
   "dependencies": {
     "@neon/config": "^1.8.6",
@@ -24,8 +25,8 @@
     "@tailwindcss/postcss": "^4.0.8",
     "clsx": "^2.1.1",
     "dotenv": "^16.4.7",
-    "fuse.js": "^7.5.0",
     "lucide-react": "^0.475.0",
+    "minisearch": "^7.2.0",
     "next": "^14.2.24",
     "pg": "^8.13.1",
     "postcss": "^8.5.2",
@@ -39,6 +40,7 @@
     "@types/pg": "^8.11.11",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
+    "tsx": "^4.23.15",
     "typescript": "^5.7.3"
   }
 }

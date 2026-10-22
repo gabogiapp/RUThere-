@@ -7,6 +7,7 @@ import {
 } from '../types/event';
 import { enrichEvent } from '../utils/dateUtils';
 import { ClubRecord } from '../../lib/types';
+import { getMatchingEventIds } from '../utils/searchEngine';
 
 interface CalendarContextType {
   events: CalendarEvent[];
@@ -21,6 +22,8 @@ interface CalendarContextType {
   setView: (view: CalendarViewType) => void;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
+  searchScope: 'upcoming' | 'past';
+  setSearchScope: (scope: 'upcoming' | 'past') => void;
   selectedCategory: ClubCategory | 'All';
   setSelectedCategory: (cat: ClubCategory | 'All') => void;
   selectedCampus: RutgersCampus | 'All';
@@ -43,6 +46,7 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   // Default state is 'agenda' (List view)
   const [view, setView] = useState<CalendarViewType>('agenda');
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchScope, setSearchScope] = useState<'upcoming' | 'past'>('upcoming');
   const [selectedCategory, setSelectedCategory] = useState<ClubCategory | 'All'>('All');
   const [selectedCampus, setSelectedCampus] = useState<RutgersCampus | 'All'>('All');
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
@@ -101,43 +105,19 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // Filtered events
   const filteredEvents = useMemo(() => {
+    const isSearching = Boolean(searchQuery.trim());
+    const isPastMode = searchScope === 'past';
+
+    const matchingIds = isSearching
+      ? getMatchingEventIds(searchQuery, clubs, events, { scope: searchScope })
+      : isPastMode
+      ? getMatchingEventIds('', clubs, events, { scope: 'past' })
+      : null;
+
     return events.filter(event => {
-      // Search query
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const qClean = q.replace(/^@/, '');
-        const matchesTitle = event.title.toLowerCase().includes(q);
-        const matchesClub =
-          event.club_name.toLowerCase().includes(q) ||
-          event.club_handle.toLowerCase().includes(q) ||
-          event.club_handle.toLowerCase().replace(/^@/, '').includes(qClean);
-        const matchesLoc = event.location.toLowerCase().includes(q);
-        const matchesDesc = (event.description || '').toLowerCase().includes(q);
-
-        const isFreeFoodSearch =
-          q === 'free food' ||
-          q.includes('free food') ||
-          q.includes('freefood') ||
-          q === 'food' ||
-          q === 'free' ||
-          'free food'.includes(q) ||
-          q.includes('pizza');
-        const matchesFreeFood = Boolean(event.has_free_food) && isFreeFoodSearch;
-
-        // Also check if search query matches any interest tag of this event's club
-        const matchingClub = clubs.find(c => {
-          const cName = c.name.toLowerCase();
-          const cHandle = c.handle.toLowerCase().replace(/^@/, '');
-          const isThisClub =
-            event.club_name.toLowerCase().includes(cName) ||
-            event.club_handle.toLowerCase().replace(/^@/, '') === cHandle;
-          if (!isThisClub) return false;
-          return (c.interests || []).some(interest => interest.toLowerCase().includes(q));
-        });
-
-        if (!matchesTitle && !matchesClub && !matchesLoc && !matchesDesc && !matchesFreeFood && !matchingClub) {
-          return false;
-        }
+      // Search query filter (O(1) set lookup)
+      if (matchingIds && !matchingIds.has(event.id)) {
+        return false;
       }
 
       // Category filter
@@ -156,7 +136,7 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
       return true;
     });
-  }, [events, clubs, searchQuery, selectedCategory, selectedCampus]);
+  }, [events, clubs, searchQuery, searchScope, selectedCategory, selectedCampus]);
 
   return (
     <CalendarContext.Provider
@@ -173,6 +153,8 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setView,
         searchQuery,
         setSearchQuery,
+        searchScope,
+        setSearchScope,
         selectedCategory,
         setSelectedCategory,
         selectedCampus,

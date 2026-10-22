@@ -12,7 +12,7 @@ It bridges the gap between fragmented social media announcements and student sch
 - **4 Responsive Calendar Views**: Seamless switching between **Agenda / List** (Default), **Week**, **Day**, and **Month** views.
 - **Campus-Wide Filtering**: Instant filtering across *All Campuses*, *College Ave*, *Busch*, *Livingston*, *Cook/Douglass*, and *Virtual / Online*.
 - **Club Category Taxonomy**: Color-coded category tags with live event counts (*Tech & Coding*, *Engineering*, *Academic & Professional*, *Cultural & Identity*, *Social & Student Life*, *Arts & Media*, *Sports & Recreation*, *Community & Service*).
-- **Two-Tier Semantic Fuzzy Search (Fuse.js)**: Typo-tolerant search across event titles, descriptions, locations, and clubs using Gemini-generated primary interests and related academic domains.
+- **Two-Tier Semantic Fuzzy Search (MiniSearch)**: Sub-millisecond typo-tolerant search across event titles, descriptions, locations, and clubs using Gemini-generated primary interests and related academic domains.
 - **1-Click Calendar Synchronization**:
   - **Add to Google Calendar**: Generates pre-populated event links (title, time, venue, description).
   - **Download .ICS**: RFC-compliant calendar files compatible with Apple Calendar, Microsoft Outlook, and standard clients.
